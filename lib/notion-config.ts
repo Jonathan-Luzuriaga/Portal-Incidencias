@@ -60,7 +60,7 @@ export function getNotionConfig(): NotionConfig {
       tags: process.env.NOTION_PROP_TAGS ?? "Etiquetas",
       client: process.env.NOTION_PROP_CLIENT ?? "Cliente",
       clientProject: process.env.NOTION_PROP_CLIENT_PROJECT ?? "Proyecto Cliente",
-      ticketType: process.env.NOTION_PROP_TICKET_TYPE ?? "Tipo de Ticket",
+      ticketType: process.env.NOTION_PROP_TICKET_TYPE ?? "Tipo de etiqueta",
       status: process.env.NOTION_PROP_STATUS ?? "Estado",
       sprint: process.env.NOTION_PROP_SPRINT ?? "Sprint",
     },
@@ -68,7 +68,7 @@ export function getNotionConfig(): NotionConfig {
     defaults: {
       client: process.env.NOTION_DEFAULT_CLIENT ?? "Bago",
       category: parseCsvValues(categoryRaw),
-      ticketType: process.env.NOTION_DEFAULT_TICKET_TYPE ?? "Bug",
+      ticketType: process.env.NOTION_DEFAULT_TICKET_TYPE ?? "Incidencia",
       status: process.env.NOTION_DEFAULT_STATUS ?? "Sin empezar",
       tags: parseCsvValues(tagsRaw),
       projectContext: process.env.NOTION_PROJECT_CONTEXT ?? "SGC Front",
