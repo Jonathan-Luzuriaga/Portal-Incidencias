@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Security-Policy",
             value:
-              "frame-ancestors 'self' https://*.notion.so https://*.notion.site",
+              "frame-ancestors 'self' https://app.notion.com https://notion.so https://www.notion.so https://*.notion.so https://*.notion.site",
           },
         ],
       },
