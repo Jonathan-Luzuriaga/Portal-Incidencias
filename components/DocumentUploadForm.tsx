@@ -33,7 +33,6 @@ export default function DocumentUploadForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [created, setCreated] = useState<CreatedIncidentSummary[]>([]);
   const [docName, setDocName] = useState("");
-  const [imageNames, setImageNames] = useState<string[]>([]);
   const [clientProject, setClientProject] = useState(DEFAULT_CLIENT_PROJECT);
 
   useEffect(() => {
@@ -78,7 +77,6 @@ export default function DocumentUploadForm() {
   function resetForm() {
     formRef.current?.reset();
     setDocName("");
-    setImageNames([]);
     setStatus("idle");
     setErrorMsg("");
     setCreated([]);
@@ -104,11 +102,6 @@ export default function DocumentUploadForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
     >
-      <p className="text-sm text-[#787774]">
-        Sube el PDF o Word del reporte (formato ZONALES con INCIDENCIA 001, 002…).
-        DeepSeek extrae los campos y crea una tarea por incidencia en Notion.
-      </p>
-
       <ClientProjectSelect
         id="clientProjectDoc"
         value={clientProject}
@@ -130,29 +123,9 @@ export default function DocumentUploadForm() {
           className="block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
         />
         {docName && <p className="mt-1 text-xs text-[#787774]">• {docName}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="docImages" className={labelClasses}>
-          Evidencias (opcional, máx. 10)
-        </label>
-        <input
-          id="docImages"
-          name="images"
-          type="file"
-          accept="image/*"
-          multiple
-          disabled={loading}
-          onChange={(e) => setImageNames(Array.from(e.target.files ?? []).map((f) => f.name))}
-          className="block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
-        />
-        {imageNames.length > 0 && (
-          <ul className="mt-2 space-y-1 text-xs text-[#787774]">
-            {imageNames.map((name) => (
-              <li key={name} className="truncate">• {name}</li>
-            ))}
-          </ul>
-        )}
+        <p className="mt-2 text-xs text-[#9b9a97]">
+          Las capturas incluidas en el documento se asignan a cada incidencia según la sección INCIDENCIA 001, 002…
+        </p>
       </div>
 
       {status === "error" && (

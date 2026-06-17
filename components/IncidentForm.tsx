@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { CreatedIncidentSummary, IncidentApiResponse } from "@/lib/types";
 import { DEFAULT_CLIENT_PROJECT, resolveClientProject } from "@/lib/project-profiles";
 import { ClientProjectSelect } from "./ClientProjectSelect";
+import { EvidenceInput } from "./EvidenceInput";
 import { SuccessPanel } from "./SuccessPanel";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -64,7 +65,7 @@ export default function IncidentForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [created, setCreated] = useState<CreatedIncidentSummary[]>([]);
-  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [dateTime, setDateTime] = useState("");
   const [clientProject, setClientProject] = useState(DEFAULT_CLIENT_PROJECT);
 
@@ -86,6 +87,9 @@ export default function IncidentForm() {
     try {
       const formData = new FormData(e.currentTarget);
       formData.set("dateTime", dateTime || nowInGuayaquil());
+      for (const file of evidenceFiles) {
+        formData.append("images", file);
+      }
 
       const res = await fetch("/api/incidencias", {
         method: "POST",
@@ -110,7 +114,7 @@ export default function IncidentForm() {
 
   function resetForm() {
     formRef.current?.reset();
-    setFileNames([]);
+    setEvidenceFiles([]);
     setDateTime(nowInGuayaquil());
     setStatus("idle");
     setErrorMsg("");
@@ -241,7 +245,7 @@ export default function IncidentForm() {
             type="text"
             required
             disabled={loading}
-            placeholder="Ej. CHROME / https://app.ejemplo.com/#/modulo/ruta"
+            placeholder="Ej. PRODUCTO / https://app.ejemplo.com/#/modulo/ruta"
             className={fieldClasses}
           />
         </div>
@@ -309,30 +313,7 @@ export default function IncidentForm() {
       <div className={sectionClasses}>
         <SectionTitle>Evidencias</SectionTitle>
 
-        <div>
-          <label htmlFor="images" className={labelClasses}>
-            Imágenes <span className="font-normal text-[#9b9a97]">(opcional, máx. 10)</span>
-          </label>
-          <input
-            id="images"
-            name="images"
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={loading}
-            onChange={(e) =>
-              setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))
-            }
-            className="block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
-          />
-          {fileNames.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-[#787774]">
-              {fileNames.map((name) => (
-                <li key={name} className="truncate">• {name}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <EvidenceInput disabled={loading} onChange={setEvidenceFiles} />
       </div>
 
       {status === "error" && (
