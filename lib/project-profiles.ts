@@ -35,7 +35,7 @@ export const BAGO_CLIENT_PROJECT_OPTIONS: ClientProjectOption[] = [
 export const DEFAULT_CLIENT_PROJECT = "[BAGO][ZONALES-MG]";
 
 /** Etiquetas base para incidencias QA de Bago. */
-const BAGO_BASE_TAGS = ["tareas", "bugs", "qa", "Frontend", "UX/UI"] as const;
+const BAGO_BASE_TAGS = ["tareas", "bugs", "qa", "Frontend", "UX/UI", "Incidencias"] as const;
 
 /**
  * Mapeo Proyecto Cliente → etiqueta en columna Etiquetas (solo Bago).
