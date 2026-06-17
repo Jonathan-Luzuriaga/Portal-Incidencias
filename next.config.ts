@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pdf-parse y mammoth fallan si Next los empaqueta para serverless (Vercel).
+  serverExternalPackages: ["pdf-parse", "mammoth"],
   async headers() {
     return [
       {
