@@ -36,6 +36,14 @@ export function notionDate(isoDate: string) {
   return { date: { start: isoDate } };
 }
 
+export function notionNumber(value: number) {
+  return { number: value };
+}
+
+export function notionUrl(url: string) {
+  return { url };
+}
+
 export function parseCsvValues(raw: string): string[] {
   return raw
     .split(",")
