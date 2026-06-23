@@ -17,7 +17,7 @@ import {
 } from "./notion-properties";
 import { resolveCurrentSprintId } from "./notion-sprint";
 import { getTeamNotionProps } from "./team-notion-config";
-import { getDefaultTeamTags } from "./team-profiles";
+import { getDefaultTeamTags, buildTeamBodyMarkdown } from "./team-profiles";
 import type { TeamTaskFormData } from "./team-types";
 import { ServiceError } from "./types";
 
@@ -34,19 +34,31 @@ export async function createTeamTaskPage(
   const { props, defaults } = config;
   const today = todayIsoDate();
 
-  const bodyMarkdown = form.bodyMarkdown.trim();
+  const bodyMarkdown = buildTeamBodyMarkdown(
+    form.bodyMarkdown,
+    form.environment,
+    form.scope
+  );
   const bodyBlocks = [
     ...(bodyMarkdown ? markdownToNotionBlocks(bodyMarkdown) : []),
     ...evidenceImageBlocks(fileUploadIds),
   ];
 
-  const tags = getDefaultTeamTags(form.ticketType, form.clientProject, form.tags);
+  const tags = getDefaultTeamTags(
+    form.ticketType,
+    form.clientProject,
+    form.tags,
+    form.environment
+  );
+
+  const categories =
+    form.categories.length > 0 ? form.categories : [form.category].filter(Boolean);
 
   const properties: Record<string, unknown> = {
     [props.title]: notionTitle(form.title),
     [props.description]: notionRichText(form.shortDescription),
     [props.priority]: notionSelect(form.priority),
-    [props.category]: notionMultiSelect([form.category]),
+    [props.category]: notionMultiSelect(categories),
     [props.project]: notionRelation([form.projectRelationId]),
     [props.client]: notionMultiSelect([form.client]),
     [props.clientProject]: notionMultiSelect([form.clientProject]),

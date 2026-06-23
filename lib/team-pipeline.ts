@@ -1,7 +1,11 @@
 import { formatTeamTaskFromRaw } from "./deepseek-team";
 import { createTeamTaskPage } from "./team-notion";
 import { uploadEvidenceImages } from "./notion-files";
-import { getProjectMetadata } from "./team-profiles";
+import {
+  buildTeamBodyMarkdown,
+  inferClientFromClientProject,
+  scopeToCategories,
+} from "./team-profiles";
 import type {
   CreatedTeamTaskSummary,
   FormattedTeamTask,
@@ -13,7 +17,8 @@ export function applyFormattedTeamTask(
   form: TeamTaskFormData,
   formatted: FormattedTeamTask
 ): TeamTaskFormData {
-  const meta = getProjectMetadata(form.projectRelationId);
+  const clientProject = form.clientProject || formatted.clientProject;
+  const categories = scopeToCategories(form.scope);
   const enabledFromForm = form.subtasks.filter((s) => s.enabled && s.title.trim());
 
   const subtasks =
@@ -25,16 +30,25 @@ export function applyFormattedTeamTask(
           enabled: true,
         }));
 
+  const bodyMarkdown = buildTeamBodyMarkdown(
+    formatted.bodyMarkdown,
+    form.environment,
+    form.scope
+  );
+
   return {
     title: formatted.title,
     shortDescription: formatted.shortDescription,
-    bodyMarkdown: formatted.bodyMarkdown,
+    bodyMarkdown,
     ticketType: form.ticketType,
     priority: formatted.priority,
-    category: formatted.category,
+    category: form.category || categories[0] || formatted.category,
+    categories,
+    environment: form.environment,
+    scope: form.scope,
     tags: formatted.tags,
-    client: meta.client,
-    clientProject: meta.clientProject,
+    client: inferClientFromClientProject(clientProject),
+    clientProject,
     projectRelationId: form.projectRelationId,
     assigneeId: form.assigneeId,
     parentTaskId: form.parentTaskId,
@@ -48,17 +62,25 @@ export function applyFormattedTeamTask(
 export async function processAndCreateTeamTask(
   form: TeamTaskFormData,
   imageFiles: File[],
-  options?: { rawDescription?: string; useAi?: boolean }
+  options?: { rawDescription?: string; useAi?: boolean; projectLabel?: string }
 ): Promise<CreatedTeamTaskSummary[]> {
-  let finalForm = form;
+  let finalForm: TeamTaskFormData = {
+    ...form,
+    client: inferClientFromClientProject(form.clientProject),
+    categories: form.categories.length > 0 ? form.categories : scopeToCategories(form.scope),
+    category: form.category || scopeToCategories(form.scope)[0] || "Workflows",
+    bodyMarkdown: buildTeamBodyMarkdown(form.bodyMarkdown, form.environment, form.scope),
+  };
 
   const raw = options?.rawDescription?.trim();
   if (options?.useAi && raw) {
-    const projectMeta = getProjectMetadata(form.projectRelationId);
     const formatted = await formatTeamTaskFromRaw(raw, {
       ticketType: form.ticketType,
-      clientProject: projectMeta.clientProject,
-      client: projectMeta.client,
+      clientProject: form.clientProject,
+      client: inferClientFromClientProject(form.clientProject),
+      projectLabel: options.projectLabel,
+      environment: form.environment,
+      scope: form.scope,
     });
     finalForm = applyFormattedTeamTask(form, formatted);
   }
@@ -82,7 +104,11 @@ export async function processAndCreateTeamTask(
         ...finalForm,
         title: sub.title.trim(),
         shortDescription: (sub.shortDescription || sub.title).trim(),
-        bodyMarkdown: `## Subtarea de: ${finalForm.title}\n\n${sub.shortDescription || sub.title}`,
+        bodyMarkdown: buildTeamBodyMarkdown(
+          `## Subtarea de: ${finalForm.title}\n\n${sub.shortDescription || sub.title}`,
+          finalForm.environment,
+          finalForm.scope
+        ),
         ticketType: "Tarea",
         parentTaskId: mainPage.id,
         subtasks: [],

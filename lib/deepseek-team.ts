@@ -1,6 +1,5 @@
 import {
   TEAM_CATEGORY_OPTIONS,
-  TEAM_CLIENT_PROJECT_OPTIONS,
   TEAM_TAG_SUGGESTIONS,
   resolveTeamClientProject,
 } from "./team-profiles";
@@ -8,7 +7,9 @@ import type {
   FormattedSubtask,
   FormattedTeamTask,
   TeamClient,
+  TeamEnvironment,
   TeamPriority,
+  TeamScope,
   TeamTicketType,
 } from "./team-types";
 import { TEAM_CLIENTS, TEAM_PRIORITIES, TEAM_TICKET_TYPES } from "./team-types";
@@ -51,6 +52,8 @@ export interface TeamFormatHints {
   client?: TeamClient;
   ticketType?: TeamTicketType;
   projectLabel?: string;
+  environment?: TeamEnvironment;
+  scope?: TeamScope;
 }
 
 function allowedValuesPrompt(): string {
@@ -90,6 +93,14 @@ function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
     : { clientProject: "[ML][Gestion]", client: "Manticore Labs" as TeamClient };
 
   const isBug = ticketType === "Bug";
+  const scopeCategory =
+    hints.scope === "Backend"
+      ? "Backend"
+      : hints.scope === "Frontend"
+        ? "Frontend"
+        : isBug
+          ? "BUG"
+          : "Workflows";
 
   return {
     title,
@@ -99,7 +110,7 @@ function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
       : `## 📍 Contexto\n${raw}\n\n## 🎯 Objetivo\n(Por completar)\n\n## 📐 Alcance\n(Por completar)\n\n## ✅ Criterios de aceptación\n- `,
     ticketType,
     priority: "Media",
-    category: isBug ? "BUG" : "Workflows",
+    category: isBug ? "BUG" : scopeCategory,
     tags: isBug ? ["tareas", "bugs"] : ["tareas"],
     client: meta.client,
     clientProject: meta.clientProject,
@@ -205,6 +216,8 @@ export async function formatTeamTaskFromRaw(
     hints.ticketType ? `Tipo elegido por PM (usar para plantilla bodyMarkdown): ${hints.ticketType}` : "",
     hints.projectLabel ? `Proyecto: ${hints.projectLabel}` : "",
     hints.clientProject ? `Proyecto Cliente: ${hints.clientProject}` : "",
+    hints.environment ? `Ambiente elegido por PM: ${hints.environment}` : "",
+    hints.scope ? `Área técnica elegida por PM: ${hints.scope}` : "",
     "",
     "Descripción en bruto:",
     raw,

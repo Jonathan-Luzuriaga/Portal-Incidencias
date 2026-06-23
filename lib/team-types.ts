@@ -10,6 +10,24 @@ export type TeamClient = "Bago" | "Manticore Labs" | "Plasticaucho";
 
 export const TEAM_CLIENTS: TeamClient[] = ["Manticore Labs", "Bago", "Plasticaucho"];
 
+export type TeamEnvironment = "Desarrollo" | "QA" | "Despliegue";
+
+export const TEAM_ENVIRONMENTS: TeamEnvironment[] = ["Desarrollo", "QA", "Despliegue"];
+
+export type TeamScope = "Frontend" | "Backend" | "Fullstack";
+
+export const TEAM_SCOPES: TeamScope[] = ["Frontend", "Backend", "Fullstack"];
+
+export interface TeamProjectOption {
+  relationId: string;
+  label: string;
+}
+
+export interface TeamClientProjectOption {
+  value: string;
+  label: string;
+}
+
 export interface TeamSubtaskInput {
   title: string;
   shortDescription: string;
@@ -40,6 +58,9 @@ export interface TeamTaskFormData {
   projectRelationId: string;
   assigneeId: string;
   parentTaskId: string;
+  environment: TeamEnvironment;
+  scope: TeamScope;
+  categories: string[];
   category: string;
   tags: string[];
   subtasks: TeamSubtaskInput[];
@@ -105,6 +126,8 @@ export type TeamStructureApiResponse = TeamStructureApiSuccess | TeamStructureAp
 export interface TeamOptionsApiSuccess {
   ok: true;
   users: TeamUserOption[];
+  projects: TeamProjectOption[];
+  clientProjects: TeamClientProjectOption[];
   parents: TeamParentOption[];
 }
 

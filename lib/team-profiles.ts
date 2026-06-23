@@ -1,60 +1,14 @@
-import type { TeamClient } from "./team-types";
+import type { TeamClient, TeamClientProjectOption, TeamEnvironment, TeamScope } from "./team-types";
 
-export interface TeamProjectOption {
-  /** Page id del proyecto en Notion (columna Proyecto). */
-  relationId: string;
-  label: string;
-}
-
-export interface TeamClientProjectOption {
-  value: string;
-  label: string;
-}
-
-/** Proyectos frecuentes en la BD Proyectos de Notion. */
-export const TEAM_PROJECT_OPTIONS: TeamProjectOption[] = [
+/** Proyectos frecuentes (fallback si no hay NOTION_PROJECTS_DATABASE_ID). */
+export const TEAM_PROJECT_OPTIONS = [
   { relationId: "32f4f339-cf21-803b-4a2c-29196fe31f6", label: "Manticore Labs — Gestión" },
   { relationId: "32d4f339-cf21-80d7-a5a8d860913a99b1", label: "Bago — Zonales" },
   { relationId: "32f4f339-cf21-8003-b4a2-c29196fe31f6", label: "Bago — SGC" },
   { relationId: "45dac611-aded-4775-b62c-99f2f1bb945d", label: "Bago — MM360" },
 ];
 
-/** Cliente y Proyecto Cliente inferidos al elegir Proyecto (Notion). */
-export const PROJECT_METADATA: Record<
-  string,
-  { clientProject: string; client: TeamClient }
-> = {
-  "32f4f339-cf21-803b-4a2c-29196fe31f6": {
-    clientProject: "[ML][Gestion]",
-    client: "Manticore Labs",
-  },
-  "32d4f339-cf21-80d7-a5a8d860913a99b1": {
-    clientProject: "[BAGO][ZONALES-MG]",
-    client: "Bago",
-  },
-  "32f4f339-cf21-8003-b4a2-c29196fe31f6": {
-    clientProject: "[BAGO][SICAB-MG]",
-    client: "Bago",
-  },
-  "45dac611-aded-4775-b62c-99f2f1bb945d": {
-    clientProject: "[Bago][MM360]",
-    client: "Bago",
-  },
-};
-
-export function getProjectMetadata(projectRelationId: string): {
-  clientProject: string;
-  client: TeamClient;
-} {
-  return (
-    PROJECT_METADATA[projectRelationId] ?? {
-      clientProject: DEFAULT_TEAM_CLIENT_PROJECT,
-      client: DEFAULT_TEAM_CLIENT,
-    }
-  );
-}
-
-/** Valores de Proyecto Cliente según la BD Tareas de Notion. */
+/** Valores de Proyecto Cliente (fallback si falla el esquema de Notion). */
 export const TEAM_CLIENT_PROJECT_OPTIONS: TeamClientProjectOption[] = [
   { value: "[ML][Gestion]", label: "ML — Gestión" },
   { value: "[ML][SIB-BAGO]", label: "ML — SIB Bago" },
@@ -101,6 +55,8 @@ export const TEAM_TAG_SUGGESTIONS = [
   "tareas",
   "bugs",
   "qa",
+  "DEV",
+  "despliegue",
   "Frontend",
   "Backend",
   "notion",
@@ -126,43 +82,69 @@ const CLIENT_PROJECT_TO_TAG: Record<string, string> = {
   "[BAGO][REGA]": "rega",
 };
 
-export function resolveTeamClientProject(raw: string | null | undefined): string {
+export function scopeToCategories(scope: TeamScope): string[] {
+  if (scope === "Frontend") return ["Frontend"];
+  if (scope === "Backend") return ["Backend"];
+  return ["Frontend", "Backend"];
+}
+
+export function environmentToTag(env: TeamEnvironment): string {
+  if (env === "Desarrollo") return "DEV";
+  if (env === "QA") return "qa";
+  return "despliegue";
+}
+
+export function inferClientFromClientProject(clientProject: string): TeamClient {
+  const upper = clientProject.toUpperCase();
+  if (upper.includes("PLAST")) return "Plasticaucho";
+  if (upper.includes("BAGO")) return "Bago";
+  return "Manticore Labs";
+}
+
+export function resolveTeamClientProject(
+  raw: string | null | undefined,
+  options: TeamClientProjectOption[] = TEAM_CLIENT_PROJECT_OPTIONS
+): string {
   const value = (raw ?? "").trim();
   if (!value) return DEFAULT_TEAM_CLIENT_PROJECT;
 
-  const exact = TEAM_CLIENT_PROJECT_OPTIONS.find((o) => o.value === value);
+  const exact = options.find((o) => o.value === value);
   if (exact) return exact.value;
 
   const lower = value.toLowerCase();
-  const byLabel = TEAM_CLIENT_PROJECT_OPTIONS.find((o) => o.label.toLowerCase() === lower);
+  const byLabel = options.find((o) => o.label.toLowerCase() === lower);
   if (byLabel) return byLabel.value;
 
   if (lower === "gestion" || lower === "ml") return "[ML][Gestion]";
   if (lower === "sgc" || lower === "sicab") return "[BAGO][SICAB-MG]";
   if (lower === "zonales") return "[BAGO][ZONALES-MG]";
 
-  return DEFAULT_TEAM_CLIENT_PROJECT;
+  return value;
 }
 
-export function resolveTeamProject(raw: string | null | undefined): string {
+export function resolveTeamProject(
+  raw: string | null | undefined,
+  options: Array<{ relationId: string; label: string }> = TEAM_PROJECT_OPTIONS
+): string {
   const value = (raw ?? "").trim();
-  if (!value) return DEFAULT_TEAM_PROJECT;
+  if (!value) return options[0]?.relationId ?? DEFAULT_TEAM_PROJECT;
 
-  const exact = TEAM_PROJECT_OPTIONS.find((o) => o.relationId === value);
+  const exact = options.find((o) => o.relationId === value);
   if (exact) return exact.relationId;
 
   const lower = value.toLowerCase();
-  const byLabel = TEAM_PROJECT_OPTIONS.find((o) => o.label.toLowerCase() === lower);
+  const byLabel = options.find((o) => o.label.toLowerCase() === lower);
   if (byLabel) return byLabel.relationId;
 
-  return DEFAULT_TEAM_PROJECT;
+  return options[0]?.relationId ?? DEFAULT_TEAM_PROJECT;
 }
 
-/** Etiquetas sugeridas según tipo de ticket y proyecto. */
+/** Etiquetas sugeridas según tipo de ticket, proyecto y ambiente. */
 export function getDefaultTeamTags(
   ticketType: string,
   clientProject: string,
-  extraTags: string[]
+  extraTags: string[],
+  environment?: TeamEnvironment
 ): string[] {
   const tags = new Set<string>(["tareas", ...extraTags.filter(Boolean)]);
 
@@ -170,8 +152,21 @@ export function getDefaultTeamTags(
     tags.add("bugs");
   }
 
+  if (environment) {
+    tags.add(environmentToTag(environment));
+  }
+
   const projectTag = CLIENT_PROJECT_TO_TAG[clientProject];
   if (projectTag) tags.add(projectTag);
 
   return [...tags];
+}
+
+/** Prefija ambiente y área al cuerpo markdown si aún no están. */
+export function buildTeamBodyMarkdown(bodyMarkdown: string, environment: TeamEnvironment, scope: TeamScope): string {
+  const base = bodyMarkdown.trim();
+  if (base.includes("## Ambiente") || base.includes("## Área")) return base;
+
+  const header = `## Ambiente\n${environment}\n\n## Área\n${scope}\n\n`;
+  return base ? header + base : header.trimEnd();
 }

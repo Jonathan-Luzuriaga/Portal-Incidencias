@@ -5,22 +5,24 @@ import { useSearchParams } from "next/navigation";
 import { EvidenceInput } from "./EvidenceInput";
 import { SuccessPanel } from "./SuccessPanel";
 import {
-  DEFAULT_TEAM_PROJECT,
+  DEFAULT_TEAM_CLIENT_PROJECT,
   TEAM_CATEGORY_OPTIONS,
-  TEAM_PROJECT_OPTIONS,
   TEAM_TAG_SUGGESTIONS,
-  resolveTeamProject,
 } from "@/lib/team-profiles";
 import type {
   CreatedTeamTaskSummary,
+  TeamClientProjectOption,
+  TeamEnvironment,
   TeamOptionsApiResponse,
+  TeamProjectOption,
+  TeamScope,
   TeamStructureApiResponse,
   TeamSubtaskInput,
   TeamTaskApiResponse,
   TeamTicketType,
   TeamUserOption,
 } from "@/lib/team-types";
-import { TEAM_PRIORITIES } from "@/lib/team-types";
+import { TEAM_ENVIRONMENTS, TEAM_PRIORITIES, TEAM_SCOPES } from "@/lib/team-types";
 
 type Status = "idle" | "loading" | "structuring" | "success" | "error";
 
@@ -73,14 +75,20 @@ export default function TeamTaskForm() {
   const [aiPrepared, setAiPrepared] = useState(false);
 
   const [rawInput, setRawInput] = useState("");
-  const [projectRelationId, setProjectRelationId] = useState(DEFAULT_TEAM_PROJECT);
+  const [projectRelationId, setProjectRelationId] = useState("");
+  const [clientProject, setClientProject] = useState(DEFAULT_TEAM_CLIENT_PROJECT);
+  const [environment, setEnvironment] = useState<TeamEnvironment>("Desarrollo");
+  const [scope, setScope] = useState<TeamScope>("Frontend");
   const [assigneeId, setAssigneeId] = useState("");
   const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
   const [parentTaskId, setParentTaskId] = useState("");
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
+  const [projects, setProjects] = useState<TeamProjectOption[]>([]);
+  const [clientProjects, setClientProjects] = useState<TeamClientProjectOption[]>([]);
   const [parents, setParents] = useState<{ id: string; title: string; ticketType: string }[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -95,28 +103,48 @@ export default function TeamTaskForm() {
 
   const loadOptions = useCallback(async (projectId: string) => {
     setLoadingOptions(true);
+    setOptionsError("");
     try {
-      const res = await fetch(`/api/tareas/opciones?proyecto=${encodeURIComponent(projectId)}`);
+      const query = projectId ? `?proyecto=${encodeURIComponent(projectId)}` : "";
+      const res = await fetch(`/api/tareas/opciones${query}`);
       const data = (await res.json()) as TeamOptionsApiResponse;
-      if (res.ok && data.ok) {
-        setUsers(data.users);
-        setParents(data.parents);
+      if (!res.ok || !data.ok) {
+        setOptionsError(!data.ok ? data.error : `Error ${res.status}`);
+        return;
+      }
+
+      setUsers(data.users);
+      setProjects(data.projects);
+      setClientProjects(data.clientProjects);
+      setParents(data.parents);
+
+      if (!projectId && data.projects.length > 0) {
+        const fromUrl = searchParams.get("proyecto_notion");
+        const match = fromUrl
+          ? data.projects.find((p) => p.relationId === fromUrl)
+          : undefined;
+        setProjectRelationId(match?.relationId ?? data.projects[0].relationId);
+      }
+
+      if (data.clientProjects.length > 0) {
+        setClientProject((current) => {
+          const exists = data.clientProjects.some((o) => o.value === current);
+          return exists ? current : data.clientProjects[0].value;
+        });
       }
     } catch {
-      // Silencioso: el formulario sigue usable con campos mínimos
+      setOptionsError("No se pudieron cargar opciones de Notion. Revisa la conexión.");
     } finally {
       setLoadingOptions(false);
     }
-  }, []);
-
-  useEffect(() => {
-    const project = resolveTeamProject(searchParams.get("proyecto_notion"));
-    setProjectRelationId(project);
   }, [searchParams]);
 
   useEffect(() => {
     loadOptions(projectRelationId);
   }, [projectRelationId, loadOptions]);
+
+  const projectLabel =
+    projects.find((p) => p.relationId === projectRelationId)?.label ?? "";
 
   function toggleTag(tag: string) {
     setSelectedTags((prev) =>
@@ -153,6 +181,10 @@ export default function TeamTaskForm() {
           rawDescription: rawInput,
           ticketType,
           projectRelationId,
+          projectLabel,
+          clientProject,
+          environment,
+          scope,
         }),
       });
 
@@ -197,6 +229,16 @@ export default function TeamTaskForm() {
       setStatus("error");
       return;
     }
+    if (!clientProject) {
+      setErrorMsg("Selecciona el Proyecto Cliente.");
+      setStatus("error");
+      return;
+    }
+    if (!projectRelationId) {
+      setErrorMsg("Selecciona un proyecto.");
+      setStatus("error");
+      return;
+    }
     if (!rawInput.trim() && !title.trim()) {
       setErrorMsg("Describe la idea de la tarea.");
       setStatus("error");
@@ -213,6 +255,10 @@ export default function TeamTaskForm() {
       formData.set("rawInput", rawInput);
       formData.set("subtasksJson", JSON.stringify(subtasks));
       formData.set("useAi", aiPrepared ? "false" : "true");
+      formData.set("projectLabel", projectLabel);
+      formData.set("clientProject", clientProject);
+      formData.set("environment", environment);
+      formData.set("scope", scope);
       for (const file of evidenceFiles) {
         formData.append("images", file);
       }
@@ -255,6 +301,14 @@ export default function TeamTaskForm() {
     setHours("");
     setSubtasks([]);
     setParentTaskId("");
+    setEnvironment("Desarrollo");
+    setScope("Frontend");
+    if (clientProjects.length > 0) {
+      setClientProject(clientProjects[0].value);
+    }
+    if (projects.length > 0) {
+      setProjectRelationId(projects[0].relationId);
+    }
     setStatus("idle");
     setErrorMsg("");
     setCreated([]);
@@ -306,7 +360,7 @@ export default function TeamTaskForm() {
             id="projectRelationId"
             name="projectRelationId"
             required
-            disabled={busy}
+            disabled={busy || loadingOptions || projects.length === 0}
             value={projectRelationId}
             onChange={(e) => {
               setProjectRelationId(e.target.value);
@@ -314,10 +368,78 @@ export default function TeamTaskForm() {
             }}
             className={fieldClasses}
           >
-            {TEAM_PROJECT_OPTIONS.map((opt) => (
-              <option key={opt.relationId} value={opt.relationId}>{opt.label}</option>
+            {projects.length === 0 ? (
+              <option value="">
+                {loadingOptions ? "Cargando proyectos…" : "Sin proyectos disponibles"}
+              </option>
+            ) : (
+              projects.map((opt) => (
+                <option key={opt.relationId} value={opt.relationId}>{opt.label}</option>
+              ))
+            )}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="clientProject" className={labelClasses}>Proyecto Cliente</label>
+          <select
+            id="clientProject"
+            name="clientProject"
+            required
+            disabled={busy || loadingOptions || clientProjects.length === 0}
+            value={clientProject}
+            onChange={(e) => setClientProject(e.target.value)}
+            className={fieldClasses}
+          >
+            {clientProjects.length === 0 ? (
+              <option value="">
+                {loadingOptions ? "Cargando…" : "Sin opciones"}
+              </option>
+            ) : (
+              clientProjects.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))
+            )}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="environment" className={labelClasses}>Ambiente</label>
+          <select
+            id="environment"
+            name="environment"
+            required
+            disabled={busy}
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value as TeamEnvironment)}
+            className={fieldClasses}
+          >
+            {TEAM_ENVIRONMENTS.map((env) => (
+              <option key={env} value={env}>{env}</option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <span className={labelClasses}>Área</span>
+          <div className="flex gap-2">
+            {TEAM_SCOPES.map((area) => (
+              <button
+                key={area}
+                type="button"
+                disabled={busy}
+                className={typeButtonClass(scope === area)}
+                onClick={() => {
+                  setScope(area);
+                  setCategory(area === "Fullstack" ? "Workflows" : area);
+                  setAiPrepared(false);
+                }}
+              >
+                {area}
+              </button>
+            ))}
+          </div>
+          <input type="hidden" name="scope" value={scope} />
         </div>
 
         <div>
@@ -338,6 +460,11 @@ export default function TeamTaskForm() {
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
+          {!loadingOptions && users.length === 0 && (
+            <p className="mt-1 text-xs text-[#b5403a]">
+              No se cargaron responsables. Verifica permisos de la integración Notion.
+            </p>
+          )}
         </div>
 
         <div>
@@ -510,7 +637,7 @@ export default function TeamTaskForm() {
         >
           <SectionTitle>Detalles avanzados</SectionTitle>
           <span className="text-xs text-[#9b9a97]">
-            {showAdvanced ? "Ocultar" : "Mostrar"} (dev / QA)
+            {showAdvanced ? "Ocultar" : "Mostrar"} (prioridad, etiquetas…)
           </span>
         </button>
 
@@ -600,6 +727,12 @@ export default function TeamTaskForm() {
           </div>
         )}
       </div>
+
+      {optionsError && (
+        <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
+          {optionsError}
+        </div>
+      )}
 
       {status === "error" && (
         <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">

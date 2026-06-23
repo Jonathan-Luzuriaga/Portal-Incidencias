@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { processAndCreateTeamTask } from "@/lib/team-pipeline";
 import {
-  getProjectMetadata,
+  inferClientFromClientProject,
+  resolveTeamClientProject,
   resolveTeamProject,
+  scopeToCategories,
   TEAM_CATEGORY_OPTIONS,
-  TEAM_PROJECT_OPTIONS,
 } from "@/lib/team-profiles";
 import {
+  TEAM_ENVIRONMENTS,
   TEAM_PRIORITIES,
+  TEAM_SCOPES,
   TEAM_TICKET_TYPES,
   TeamTaskApiResponse,
   TeamTaskFormData,
+  TeamEnvironment,
   TeamPriority,
+  TeamScope,
   TeamSubtaskInput,
   TeamTicketType,
 } from "@/lib/team-types";
@@ -59,9 +64,12 @@ function parseForm(
   const bodyMarkdown = String(form.get("bodyMarkdown") ?? "").trim();
   const ticketType = String(form.get("ticketType") ?? "").trim() as TeamTicketType;
   const priority = String(form.get("priority") ?? "").trim() as TeamPriority;
-  const projectRelationId = resolveTeamProject(String(form.get("projectRelationId") ?? ""));
+  const projectRelationId = String(form.get("projectRelationId") ?? "").trim();
   const assigneeId = String(form.get("assigneeId") ?? "").trim();
   const parentTaskId = String(form.get("parentTaskId") ?? "").trim();
+  const clientProject = resolveTeamClientProject(String(form.get("clientProject") ?? ""));
+  const environmentRaw = String(form.get("environment") ?? "Desarrollo").trim() as TeamEnvironment;
+  const scopeRaw = String(form.get("scope") ?? "Frontend").trim() as TeamScope;
   const category = String(form.get("category") ?? "").trim();
   const tags = parseTags(String(form.get("tags") ?? ""));
   const subtasks = parseSubtasks(String(form.get("subtasksJson") ?? ""));
@@ -69,21 +77,26 @@ function parseForm(
   const hoursRaw = String(form.get("hours") ?? "").trim();
   const hours = hoursRaw ? Number(hoursRaw) : null;
 
-  const meta = getProjectMetadata(projectRelationId);
+  const environment = TEAM_ENVIRONMENTS.includes(environmentRaw) ? environmentRaw : "Desarrollo";
+  const scope = TEAM_SCOPES.includes(scopeRaw) ? scopeRaw : "Frontend";
+  const categories = scopeToCategories(scope);
   const willUseAi = useAi || Boolean(rawInput && !title);
 
   if (!rawInput && !title) {
     return "Describe la idea o espera el preview de la IA.";
   }
   if (!assigneeId) return "Selecciona a quién se asigna la tarea.";
+  if (!projectRelationId) return "Selecciona un proyecto.";
+  if (!clientProject) return "Selecciona el Proyecto Cliente.";
   if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo válido.";
-  if (!TEAM_PROJECT_OPTIONS.some((o) => o.relationId === projectRelationId)) {
-    return "Selecciona un proyecto válido.";
-  }
   if (!willUseAi && !TEAM_PRIORITIES.includes(priority)) {
     return "Selecciona una prioridad válida.";
   }
-  if (!willUseAi && category && !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])) {
+  if (
+    !willUseAi &&
+    category &&
+    !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])
+  ) {
     return "Selecciona una categoría válida.";
   }
   if (prLink && !/^https?:\/\//i.test(prLink)) {
@@ -99,12 +112,15 @@ function parseForm(
     bodyMarkdown,
     ticketType,
     priority: TEAM_PRIORITIES.includes(priority) ? priority : "Media",
-    client: meta.client,
-    clientProject: meta.clientProject,
+    client: inferClientFromClientProject(clientProject),
+    clientProject,
     projectRelationId,
     assigneeId,
     parentTaskId,
-    category: category || "Workflows",
+    environment,
+    scope,
+    categories,
+    category: category || categories[0] || "Workflows",
     tags,
     subtasks,
     prLink,
@@ -122,6 +138,7 @@ export async function POST(request: Request): Promise<NextResponse<TeamTaskApiRe
 
   const rawInput = String(form.get("rawInput") ?? "").trim();
   const useAi = String(form.get("useAi") ?? "") === "true";
+  const projectLabel = String(form.get("projectLabel") ?? "").trim();
 
   const parsed = parseForm(form, rawInput, useAi);
   if (typeof parsed === "string") return bad(parsed);
@@ -143,6 +160,7 @@ export async function POST(request: Request): Promise<NextResponse<TeamTaskApiRe
     const created = await processAndCreateTeamTask(parsed, files, {
       rawDescription: rawInput,
       useAi: useAi || Boolean(rawInput && !parsed.title),
+      projectLabel: projectLabel || undefined,
     });
 
     const main = created[0];

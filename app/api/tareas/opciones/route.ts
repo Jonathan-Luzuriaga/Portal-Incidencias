@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { listParentTasks, listTeamUsers } from "@/lib/team-notion-meta";
+import {
+  listClientProjectOptions,
+  listNotionProjects,
+  listParentTasks,
+  listTeamUsers,
+} from "@/lib/team-notion-meta";
 import { resolveTeamProject } from "@/lib/team-profiles";
 import { TeamOptionsApiResponse } from "@/lib/team-types";
 import { ServiceError } from "@/lib/types";
@@ -12,17 +17,23 @@ function bad(error: string, status = 400) {
 
 export async function GET(request: Request): Promise<NextResponse<TeamOptionsApiResponse>> {
   const { searchParams } = new URL(request.url);
-  const projectRelationId = resolveTeamProject(searchParams.get("proyecto"));
+  const proyectoParam = searchParams.get("proyecto");
 
   try {
-    const [users, parents] = await Promise.all([
+    const [users, projects, clientProjects] = await Promise.all([
       listTeamUsers(),
-      listParentTasks(projectRelationId),
+      listNotionProjects(),
+      listClientProjectOptions(),
     ]);
+
+    const projectRelationId = resolveTeamProject(proyectoParam, projects);
+    const parents = await listParentTasks(projectRelationId);
 
     return NextResponse.json<TeamOptionsApiResponse>({
       ok: true,
       users,
+      projects,
+      clientProjects,
       parents,
     });
   } catch (err) {

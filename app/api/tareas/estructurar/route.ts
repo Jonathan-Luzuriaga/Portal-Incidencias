@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { formatTeamTaskFromRaw } from "@/lib/deepseek-team";
-import {
-  getProjectMetadata,
-  resolveTeamProject,
-  TEAM_PROJECT_OPTIONS,
-} from "@/lib/team-profiles";
+import { inferClientFromClientProject, resolveTeamClientProject } from "@/lib/team-profiles";
 import {
   TeamStructureApiResponse,
   TEAM_TICKET_TYPES,
@@ -23,6 +19,10 @@ export async function POST(request: Request): Promise<NextResponse<TeamStructure
     rawDescription?: string;
     ticketType?: string;
     projectRelationId?: string;
+    projectLabel?: string;
+    clientProject?: string;
+    environment?: string;
+    scope?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -40,17 +40,17 @@ export async function POST(request: Request): Promise<NextResponse<TeamStructure
 
   const ticketTypeRaw = String(body.ticketType ?? "Tarea").trim() as TeamTicketType;
   const ticketType = TEAM_TICKET_TYPES.includes(ticketTypeRaw) ? ticketTypeRaw : "Tarea";
-  const projectRelationId = resolveTeamProject(body.projectRelationId);
-  const projectLabel =
-    TEAM_PROJECT_OPTIONS.find((p) => p.relationId === projectRelationId)?.label ?? "";
-  const meta = getProjectMetadata(projectRelationId);
+  const clientProject = resolveTeamClientProject(body.clientProject);
+  const client = inferClientFromClientProject(clientProject);
 
   try {
     const formatted = await formatTeamTaskFromRaw(rawDescription, {
       ticketType,
-      clientProject: meta.clientProject,
-      client: meta.client,
-      projectLabel,
+      clientProject,
+      client,
+      projectLabel: String(body.projectLabel ?? "").trim() || undefined,
+      environment: body.environment as "Desarrollo" | "QA" | "Despliegue" | undefined,
+      scope: body.scope as "Frontend" | "Backend" | "Fullstack" | undefined,
     });
 
     return NextResponse.json<TeamStructureApiResponse>({ ok: true, formatted });
