@@ -350,6 +350,8 @@ export default function TeamTaskForm() {
           />
         </div>
 
+        <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
+
         <p className="text-xs text-[#9b9a97]">
           Proyecto y Proyecto Cliente son campos independientes en Notion; puedes combinarlos libremente.
         </p>
@@ -699,7 +701,6 @@ export default function TeamTaskForm() {
               </div>
             </div>
 
-            <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
           </div>
         )}
       </div>
