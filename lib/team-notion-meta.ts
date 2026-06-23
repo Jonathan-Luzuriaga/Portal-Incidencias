@@ -22,6 +22,8 @@ const PLACEHOLDER_PROJECT_TITLES = new Set([
   "",
 ]);
 
+const PARENT_TICKET_TYPES = ["Épica", "Epica", "Tarea"];
+
 async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"): Promise<string> {
   if (cache === "tasks" && cachedTasksDataSourceId) return cachedTasksDataSourceId;
   if (cache === "projects" && cachedProjectsDataSourceId) return cachedProjectsDataSourceId;
@@ -41,6 +43,39 @@ async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"):
   else cachedProjectsDataSourceId = dsId;
 
   return dsId;
+}
+
+async function queryDataSourceAllPages<T extends { id: string }>(
+  dsId: string,
+  body: Record<string, unknown>,
+  maxPages = 30
+): Promise<T[]> {
+  const notion = getNotionClient();
+  const results: T[] = [];
+  let cursor: string | undefined;
+  let pages = 0;
+
+  do {
+    const response = await notion.request<{
+      results: T[];
+      has_more: boolean;
+      next_cursor: string | null;
+    }>({
+      path: `data_sources/${dsId}/query`,
+      method: "post",
+      body: {
+        ...body,
+        start_cursor: cursor,
+        page_size: 100,
+      },
+    });
+
+    results.push(...response.results);
+    cursor = response.has_more ? (response.next_cursor ?? undefined) : undefined;
+    pages++;
+  } while (cursor && pages < maxPages);
+
+  return results;
 }
 
 function getProjectsDatabaseId(): string | null {
@@ -74,25 +109,17 @@ export async function listNotionProjects(): Promise<TeamProjectOption[]> {
     return TEAM_PROJECT_OPTIONS;
   }
 
-  const notion = getNotionClient();
   const titleProp = process.env.NOTION_PROJECTS_TITLE_PROP ?? "Project name";
 
   try {
     const dsId = await getDataSourceId(databaseId, "projects");
-
-    const response = await notion.request<{
-      results: Array<{ id: string; properties: Record<string, unknown> }>;
-    }>({
-      path: `data_sources/${dsId}/query`,
-      method: "post",
-      body: {
-        sorts: [{ property: titleProp, direction: "ascending" }],
-        page_size: 100,
-      },
-    });
+    const pages = await queryDataSourceAllPages<{ id: string; properties: Record<string, unknown> }>(
+      dsId,
+      { sorts: [{ property: titleProp, direction: "ascending" }] }
+    );
 
     const projects: TeamProjectOption[] = [];
-    for (const page of response.results) {
+    for (const page of pages) {
       const label = extractPageTitle(page, titleProp);
       if (!label || isPlaceholderProjectTitle(label)) continue;
       projects.push({ relationId: page.id, label });
@@ -170,41 +197,74 @@ async function listUsersFromWorkspace(): Promise<TeamUserOption[]> {
   return users;
 }
 
-/** Responsables usados recientemente en tareas (fallback si users.list viene vacío). */
-async function listAssigneesFromTasks(): Promise<TeamUserOption[]> {
+/** IDs extra vía NOTION_EXTRA_ASSIGNEE_IDS (usuarios que la integración no lista sola). */
+async function listExtraAssignees(): Promise<TeamUserOption[]> {
+  const raw = process.env.NOTION_EXTRA_ASSIGNEE_IDS?.trim();
+  if (!raw) return [];
+
   const notion = getNotionClient();
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const users: TeamUserOption[] = [];
+
+  for (const id of ids) {
+    try {
+      const u = await notion.users.retrieve({ user_id: id });
+      if (u.type === "person") {
+        users.push({
+          id: u.id,
+          name: u.name ?? "Usuario",
+          avatarUrl: u.avatar_url ?? null,
+        });
+      }
+    } catch {
+      // omitir ids inválidos
+    }
+  }
+
+  return users;
+}
+
+/** Todos los responsables que aparecen en tareas (paginado completo). */
+async function listAssigneesFromTasks(): Promise<TeamUserOption[]> {
   const config = getNotionConfig();
   const teamProps = getTeamNotionProps();
   const dsId = await getDataSourceId(config.databaseId, "tasks");
 
-  const response = await notion.request<{
-    results: Array<{
-      properties: Record<
-        string,
-        { type?: string; people?: Array<{ id: string; name?: string | null }> }
-      >;
-    }>;
-  }>({
-    path: `data_sources/${dsId}/query`,
-    method: "post",
-    body: {
-      filter: {
-        property: teamProps.assignee,
-        people: { is_not_empty: true },
-      },
-      sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
-      page_size: 50,
+  const pages = await queryDataSourceAllPages<{
+    id: string;
+    properties: Record<
+      string,
+      { type?: string; people?: Array<{ id: string; name?: string | null }> }
+    >;
+  }>(dsId, {
+    filter: {
+      property: teamProps.assignee,
+      people: { is_not_empty: true },
     },
+    sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
   });
 
   const byId = new Map<string, TeamUserOption>();
-  for (const page of response.results) {
+  const notion = getNotionClient();
+
+  for (const page of pages) {
     const people = page.properties[teamProps.assignee]?.people ?? [];
     for (const person of people) {
       if (!person.id || byId.has(person.id)) continue;
+
+      let name = person.name?.trim() || "";
+      if (!name) {
+        try {
+          const u = await notion.users.retrieve({ user_id: person.id });
+          if (u.type === "person") name = u.name ?? "";
+        } catch {
+          // omitir
+        }
+      }
+
       byId.set(person.id, {
         id: person.id,
-        name: person.name ?? "Usuario",
+        name: name || "Usuario",
         avatarUrl: null,
       });
     }
@@ -213,16 +273,17 @@ async function listAssigneesFromTasks(): Promise<TeamUserOption[]> {
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
-/** Usuarios del workspace + responsables recientes en tareas. */
+/** Usuarios del workspace + responsables en tareas + extras configurados. */
 export async function listTeamUsers(): Promise<TeamUserOption[]> {
   try {
-    const [workspace, fromTasks] = await Promise.all([
+    const [workspace, fromTasks, extra] = await Promise.all([
       listUsersFromWorkspace().catch(() => [] as TeamUserOption[]),
       listAssigneesFromTasks().catch(() => [] as TeamUserOption[]),
+      listExtraAssignees().catch(() => [] as TeamUserOption[]),
     ]);
 
     const byId = new Map<string, TeamUserOption>();
-    for (const u of [...workspace, ...fromTasks]) {
+    for (const u of [...workspace, ...fromTasks, ...extra]) {
       if (!byId.has(u.id)) byId.set(u.id, u);
     }
 
@@ -242,47 +303,42 @@ export async function listTeamUsers(): Promise<TeamUserOption[]> {
   }
 }
 
-/** Épicas y tareas del proyecto para usar como padre. */
-export async function listParentTasks(projectRelationId: string): Promise<TeamParentOption[]> {
-  if (!projectRelationId) return [];
-
-  const notion = getNotionClient();
+/**
+ * Épicas y tareas candidatas a padre.
+ * Proyecto y Proyecto Cliente son independientes en Notion: no se filtra por proyecto.
+ */
+export async function listParentTasks(): Promise<TeamParentOption[]> {
   const config = getNotionConfig();
   const { props } = config;
 
   try {
     const dsId = await getDataSourceId(config.databaseId, "tasks");
 
-    const response = await notion.request<{
-      results: Array<{ id: string; properties: Record<string, unknown> }>;
-    }>({
-      path: `data_sources/${dsId}/query`,
-      method: "post",
-      body: {
+    const pages = await queryDataSourceAllPages<{ id: string; properties: Record<string, unknown> }>(
+      dsId,
+      {
         filter: {
-          and: [
-            {
-              property: props.project,
-              relation: { contains: projectRelationId },
-            },
-            {
-              or: [
-                { property: props.ticketType, select: { equals: "Épica" } },
-                { property: props.ticketType, select: { equals: "Tarea" } },
-              ],
-            },
-          ],
+          or: PARENT_TICKET_TYPES.map((type) => ({
+            property: props.ticketType,
+            select: { equals: type },
+          })),
         },
         sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
-        page_size: 40,
-      },
-    });
+      }
+    );
 
-    return response.results.map((page) => ({
-      id: page.id,
-      title: extractPageTitle(page, props.title),
-      ticketType: extractSelect(page, props.ticketType),
-    }));
+    const byId = new Map<string, TeamParentOption>();
+    for (const page of pages) {
+      const title = extractPageTitle(page, props.title);
+      if (!title) continue;
+      byId.set(page.id, {
+        id: page.id,
+        title,
+        ticketType: extractSelect(page, props.ticketType),
+      });
+    }
+
+    return [...byId.values()];
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
     throw new ServiceError(`No se pudieron listar tareas padre. ${message}`, 502);

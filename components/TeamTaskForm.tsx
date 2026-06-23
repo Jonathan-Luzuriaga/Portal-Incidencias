@@ -101,12 +101,11 @@ export default function TeamTaskForm() {
 
   const busy = status === "loading" || status === "structuring";
 
-  const loadOptions = useCallback(async (projectId: string) => {
+  const loadOptions = useCallback(async () => {
     setLoadingOptions(true);
     setOptionsError("");
     try {
-      const query = projectId ? `?proyecto=${encodeURIComponent(projectId)}` : "";
-      const res = await fetch(`/api/tareas/opciones${query}`);
+      const res = await fetch("/api/tareas/opciones");
       const data = (await res.json()) as TeamOptionsApiResponse;
       if (!res.ok || !data.ok) {
         setOptionsError(!data.ok ? data.error : `Error ${res.status}`);
@@ -118,20 +117,21 @@ export default function TeamTaskForm() {
       setClientProjects(data.clientProjects);
       setParents(data.parents);
 
-      if (!projectId && data.projects.length > 0) {
+      if (data.projects.length > 0) {
         const fromUrl = searchParams.get("proyecto_notion");
         const match = fromUrl
           ? data.projects.find((p) => p.relationId === fromUrl)
           : undefined;
-        setProjectRelationId(match?.relationId ?? data.projects[0].relationId);
-      }
-
-      if (data.clientProjects.length > 0) {
-        setClientProject((current) => {
-          const exists = data.clientProjects.some((o) => o.value === current);
-          return exists ? current : data.clientProjects[0].value;
+        setProjectRelationId((current) => {
+          if (current && data.projects.some((p) => p.relationId === current)) return current;
+          return match?.relationId ?? data.projects[0].relationId;
         });
       }
+
+      setClientProject((current) => {
+        if (current && data.clientProjects.some((o) => o.value === current)) return current;
+        return data.clientProjects[0]?.value ?? "";
+      });
     } catch {
       setOptionsError("No se pudieron cargar opciones de Notion. Revisa la conexión.");
     } finally {
@@ -140,8 +140,8 @@ export default function TeamTaskForm() {
   }, [searchParams]);
 
   useEffect(() => {
-    loadOptions(projectRelationId);
-  }, [projectRelationId, loadOptions]);
+    loadOptions();
+  }, [loadOptions]);
 
   const projectLabel =
     projects.find((p) => p.relationId === projectRelationId)?.label ?? "";
@@ -353,6 +353,10 @@ export default function TeamTaskForm() {
             className={`${fieldClasses} resize-y`}
           />
         </div>
+
+        <p className="text-xs text-[#9b9a97]">
+          Proyecto y Proyecto Cliente son campos independientes en Notion; puedes combinarlos libremente.
+        </p>
 
         <div>
           <label htmlFor="projectRelationId" className={labelClasses}>Proyecto</label>
