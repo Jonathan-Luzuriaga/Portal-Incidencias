@@ -1,29 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { EvidenceInput } from "./EvidenceInput";
 import { SuccessPanel } from "./SuccessPanel";
 import {
-  DEFAULT_TEAM_CLIENT,
-  DEFAULT_TEAM_CLIENT_PROJECT,
   DEFAULT_TEAM_PROJECT,
   TEAM_CATEGORY_OPTIONS,
-  TEAM_CLIENT_PROJECT_OPTIONS,
   TEAM_PROJECT_OPTIONS,
   TEAM_TAG_SUGGESTIONS,
-  resolveTeamClientProject,
   resolveTeamProject,
 } from "@/lib/team-profiles";
-import type { FormattedTeamTask, TeamStructureApiResponse, TeamTaskApiResponse } from "@/lib/team-types";
-import {
-  TEAM_CLIENTS,
-  TEAM_PRIORITIES,
-  TEAM_TICKET_TYPES,
-  type TeamClient,
-  type TeamPriority,
-  type TeamTicketType,
+import type {
+  CreatedTeamTaskSummary,
+  TeamOptionsApiResponse,
+  TeamStructureApiResponse,
+  TeamSubtaskInput,
+  TeamTaskApiResponse,
+  TeamTicketType,
+  TeamUserOption,
 } from "@/lib/team-types";
+import { TEAM_PRIORITIES } from "@/lib/team-types";
 
 type Status = "idle" | "loading" | "structuring" | "success" | "error";
 
@@ -36,6 +33,8 @@ const fieldClasses =
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
 const sectionClasses = "space-y-4 border-t border-[#efefef] pt-4 first:border-t-0 first:pt-0";
+
+const TICKET_TYPES: TeamTicketType[] = ["Tarea", "Bug", "Épica"];
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -52,60 +51,72 @@ function Spinner() {
   );
 }
 
-function applyFormattedToForm(formatted: FormattedTeamTask, setters: {
-  setTitle: (v: string) => void;
-  setShortDescription: (v: string) => void;
-  setBodyMarkdown: (v: string) => void;
-  setTicketType: (v: TeamTicketType) => void;
-  setPriority: (v: TeamPriority) => void;
-  setClient: (v: TeamClient) => void;
-  setClientProject: (v: string) => void;
-  setCategory: (v: string) => void;
-  setSelectedTags: (v: string[]) => void;
-  setHours: (v: string) => void;
-}) {
-  setters.setTitle(formatted.title);
-  setters.setShortDescription(formatted.shortDescription);
-  setters.setBodyMarkdown(formatted.bodyMarkdown);
-  setters.setTicketType(formatted.ticketType);
-  setters.setPriority(formatted.priority);
-  setters.setClient(formatted.client);
-  setters.setClientProject(formatted.clientProject);
-  setters.setCategory(formatted.category);
-  setters.setSelectedTags(formatted.tags);
-  if (formatted.hours != null) setters.setHours(String(formatted.hours));
+function typeButtonClass(active: boolean) {
+  return (
+    "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition " +
+    (active
+      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
+      : "border-[#efefef] bg-[#f7f7f5] text-[#787774] hover:border-[#d3d1cb]")
+  );
 }
 
 export default function TeamTaskForm() {
   const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
+
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [created, setCreated] = useState<
-    { pageId: string; pageUrl: string | null; taskTitle: string; evidenceCount: number }[]
-  >([]);
+  const [created, setCreated] = useState<CreatedTeamTaskSummary[]>([]);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [aiPrepared, setAiPrepared] = useState(false);
+
   const [rawInput, setRawInput] = useState("");
-  const [aiStructured, setAiStructured] = useState(false);
+  const [projectRelationId, setProjectRelationId] = useState(DEFAULT_TEAM_PROJECT);
+  const [assigneeId, setAssigneeId] = useState("");
+  const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
+  const [parentTaskId, setParentTaskId] = useState("");
+
+  const [users, setUsers] = useState<TeamUserOption[]>([]);
+  const [parents, setParents] = useState<{ id: string; title: string; ticketType: string }[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
   const [bodyMarkdown, setBodyMarkdown] = useState("");
-  const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
-  const [priority, setPriority] = useState<TeamPriority>("Media");
-  const [client, setClient] = useState<TeamClient>(DEFAULT_TEAM_CLIENT);
-  const [clientProject, setClientProject] = useState(DEFAULT_TEAM_CLIENT_PROJECT);
-  const [projectRelationId, setProjectRelationId] = useState(DEFAULT_TEAM_PROJECT);
-  const [category, setCategory] = useState<string>("Workflows");
+  const [priority, setPriority] = useState("Media");
+  const [category, setCategory] = useState("Workflows");
   const [selectedTags, setSelectedTags] = useState<string[]>(["tareas"]);
   const [hours, setHours] = useState("");
-
-  useEffect(() => {
-    setClientProject(resolveTeamClientProject(searchParams.get("proyecto")));
-    setProjectRelationId(resolveTeamProject(searchParams.get("proyecto_notion")));
-  }, [searchParams]);
+  const [subtasks, setSubtasks] = useState<TeamSubtaskInput[]>([]);
 
   const busy = status === "loading" || status === "structuring";
+
+  const loadOptions = useCallback(async (projectId: string) => {
+    setLoadingOptions(true);
+    try {
+      const res = await fetch(`/api/tareas/opciones?proyecto=${encodeURIComponent(projectId)}`);
+      const data = (await res.json()) as TeamOptionsApiResponse;
+      if (res.ok && data.ok) {
+        setUsers(data.users);
+        setParents(data.parents);
+      }
+    } catch {
+      // Silencioso: el formulario sigue usable con campos mínimos
+    } finally {
+      setLoadingOptions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const project = resolveTeamProject(searchParams.get("proyecto_notion"));
+    setProjectRelationId(project);
+  }, [searchParams]);
+
+  useEffect(() => {
+    loadOptions(projectRelationId);
+  }, [projectRelationId, loadOptions]);
 
   function toggleTag(tag: string) {
     setSelectedTags((prev) =>
@@ -113,7 +124,22 @@ export default function TeamTaskForm() {
     );
   }
 
-  async function handleStructure() {
+  function updateSubtask(index: number, patch: Partial<TeamSubtaskInput>) {
+    setSubtasks((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function addSubtask() {
+    setSubtasks((prev) => [
+      ...prev,
+      { title: "", shortDescription: "", enabled: true },
+    ]);
+  }
+
+  function removeSubtask(index: number) {
+    setSubtasks((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handlePrepare() {
     if (!rawInput.trim() || busy) return;
 
     setStatus("structuring");
@@ -123,7 +149,11 @@ export default function TeamTaskForm() {
       const res = await fetch("/api/tareas/estructurar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawDescription: rawInput, clientProject, client }),
+        body: JSON.stringify({
+          rawDescription: rawInput,
+          ticketType,
+          projectRelationId,
+        }),
       });
 
       const data = (await res.json()) as TeamStructureApiResponse;
@@ -134,22 +164,26 @@ export default function TeamTaskForm() {
         return;
       }
 
-      applyFormattedToForm(data.formatted, {
-        setTitle,
-        setShortDescription,
-        setBodyMarkdown,
-        setTicketType,
-        setPriority,
-        setClient,
-        setClientProject,
-        setCategory,
-        setSelectedTags,
-        setHours,
-      });
-      setAiStructured(true);
+      const f = data.formatted;
+      setTitle(f.title);
+      setShortDescription(f.shortDescription);
+      setBodyMarkdown(f.bodyMarkdown);
+      setPriority(f.priority);
+      setCategory(f.category);
+      setSelectedTags(f.tags);
+      if (f.hours != null) setHours(String(f.hours));
+      setSubtasks(
+        f.subtasks.map((s) => ({
+          title: s.title,
+          shortDescription: s.shortDescription,
+          enabled: true,
+        }))
+      );
+      setAiPrepared(true);
+      setShowPreview(true);
       setStatus("idle");
     } catch {
-      setErrorMsg("No se pudo estructurar con IA. Revisa tu conexión e inténtalo de nuevo.");
+      setErrorMsg("No se pudo preparar con IA. Revisa tu conexión e inténtalo de nuevo.");
       setStatus("error");
     }
   }
@@ -157,6 +191,17 @@ export default function TeamTaskForm() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
+
+    if (!assigneeId) {
+      setErrorMsg("Selecciona a quién se asigna la tarea.");
+      setStatus("error");
+      return;
+    }
+    if (!rawInput.trim() && !title.trim()) {
+      setErrorMsg("Describe la idea de la tarea.");
+      setStatus("error");
+      return;
+    }
 
     setStatus("loading");
     setErrorMsg("");
@@ -166,7 +211,8 @@ export default function TeamTaskForm() {
       const formData = new FormData(e.currentTarget);
       formData.set("tags", selectedTags.join(","));
       formData.set("rawInput", rawInput);
-      formData.set("useAi", aiStructured ? "false" : rawInput.trim() ? "true" : "false");
+      formData.set("subtasksJson", JSON.stringify(subtasks));
+      formData.set("useAi", aiPrepared ? "false" : "true");
       for (const file of evidenceFiles) {
         formData.append("images", file);
       }
@@ -184,14 +230,7 @@ export default function TeamTaskForm() {
         return;
       }
 
-      setCreated([
-        {
-          pageId: data.pageId,
-          pageUrl: data.pageUrl,
-          taskTitle: data.taskTitle,
-          evidenceCount: data.evidenceCount,
-        },
-      ]);
+      setCreated(data.created ?? []);
       setStatus("success");
     } catch {
       setErrorMsg("No se pudo crear la tarea. Revisa tu conexión e inténtalo de nuevo.");
@@ -203,16 +242,19 @@ export default function TeamTaskForm() {
     formRef.current?.reset();
     setEvidenceFiles([]);
     setRawInput("");
-    setAiStructured(false);
+    setAiPrepared(false);
+    setShowPreview(false);
+    setShowAdvanced(false);
     setTitle("");
     setShortDescription("");
     setBodyMarkdown("");
     setTicketType("Tarea");
     setPriority("Media");
-    setClient(DEFAULT_TEAM_CLIENT);
     setCategory("Workflows");
     setSelectedTags(["tareas"]);
     setHours("");
+    setSubtasks([]);
+    setParentTaskId("");
     setStatus("idle");
     setErrorMsg("");
     setCreated([]);
@@ -221,9 +263,10 @@ export default function TeamTaskForm() {
   if (status === "success") {
     return (
       <SuccessPanel
-        title="Tarea creada"
+        title={created.length > 1 ? "Tareas creadas" : "Tarea creada"}
         items={created}
         onReset={resetForm}
+        resetLabel="Crear otra tarea"
       />
     );
   }
@@ -235,179 +278,40 @@ export default function TeamTaskForm() {
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
       noValidate
     >
+      {/* --- Ingesta PM --- */}
       <div className={sectionClasses}>
-        <SectionTitle>Descripción en bruto</SectionTitle>
+        <SectionTitle>Ingesta</SectionTitle>
 
         <div>
-          <label htmlFor="rawInput" className={labelClasses}>
-            Pega aquí tu idea, nota o bug informal
-          </label>
+          <label htmlFor="rawInput" className={labelClasses}>Tu idea</label>
           <textarea
             id="rawInput"
             name="rawInput"
             value={rawInput}
             onChange={(e) => {
               setRawInput(e.target.value);
-              setAiStructured(false);
+              setAiPrepared(false);
             }}
             disabled={busy}
-            rows={5}
-            placeholder={"Ej. Necesitamos un endpoint para exportar congresos a Excel. QA reportó que el modal de seguimiento corta el texto en mobile.\n\nBug: al sincronizar planes en Zonales solo trae 10 de 53 registros."}
-            className={`${fieldClasses} resize-y`}
-          />
-          <p className="mt-1.5 text-xs text-[#9b9a97]">
-            La IA infiere título, tipo, prioridad, categoría, etiquetas y formatea el cuerpo de la tarea.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          disabled={busy || !rawInput.trim()}
-          onClick={handleStructure}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[#2383e2] bg-[#e8f3fc] px-4 py-2.5 text-sm font-medium text-[#1a73d1] transition hover:bg-[#d6ebfa] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {status === "structuring" && <Spinner />}
-          {status === "structuring" ? "Estructurando con IA…" : "Estructurar con IA"}
-        </button>
-
-        {aiStructured && (
-          <p className="text-xs text-[#448361]">
-            Campos rellenados. Revisa y ajusta antes de crear la tarea.
-          </p>
-        )}
-      </div>
-
-      <div className={sectionClasses}>
-        <SectionTitle>Identificación</SectionTitle>
-
-        <div>
-          <label htmlFor="title" className={labelClasses}>Título</label>
-          <input
-            id="title"
-            name="title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={busy}
-            placeholder="Ej. Implementar exportación Excel en módulo congresos"
-            className={fieldClasses}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="shortDescription" className={labelClasses}>Descripción corta</label>
-          <textarea
-            id="shortDescription"
-            name="shortDescription"
-            value={shortDescription}
-            onChange={(e) => setShortDescription(e.target.value)}
-            disabled={busy}
-            rows={2}
-            placeholder="Resumen para la columna Descripción en Notion (1–3 líneas)"
-            className={`${fieldClasses} resize-y`}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="ticketType" className={labelClasses}>Tipo de ticket</label>
-            <select
-              id="ticketType"
-              name="ticketType"
-              required
-              disabled={busy}
-              value={ticketType}
-              onChange={(e) => setTicketType(e.target.value as TeamTicketType)}
-              className={fieldClasses}
-            >
-              {TEAM_TICKET_TYPES.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="priority" className={labelClasses}>Prioridad</label>
-            <select
-              id="priority"
-              name="priority"
-              required
-              disabled={busy}
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as TeamPriority)}
-              className={fieldClasses}
-            >
-              {TEAM_PRIORITIES.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className={sectionClasses}>
-        <SectionTitle>Clasificación</SectionTitle>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="client" className={labelClasses}>Cliente</label>
-            <select
-              id="client"
-              name="client"
-              required
-              disabled={busy}
-              value={client}
-              onChange={(e) => setClient(e.target.value as TeamClient)}
-              className={fieldClasses}
-            >
-              {TEAM_CLIENTS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="category" className={labelClasses}>Categoría</label>
-            <select
-              id="category"
-              name="category"
-              required
-              disabled={busy}
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className={fieldClasses}
-            >
-              {TEAM_CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="clientProject" className={labelClasses}>Proyecto Cliente</label>
-          <select
-            id="clientProject"
-            name="clientProject"
+            rows={4}
             required
-            disabled={busy}
-            value={clientProject}
-            onChange={(e) => setClientProject(e.target.value)}
-            className={fieldClasses}
-          >
-            {TEAM_CLIENT_PROJECT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+            placeholder="Ej. Necesitamos exportar congresos a Excel. El modal de seguimiento corta texto en mobile."
+            className={`${fieldClasses} resize-y`}
+          />
         </div>
 
         <div>
-          <label htmlFor="projectRelationId" className={labelClasses}>Proyecto (Notion)</label>
+          <label htmlFor="projectRelationId" className={labelClasses}>Proyecto</label>
           <select
             id="projectRelationId"
             name="projectRelationId"
             required
             disabled={busy}
             value={projectRelationId}
-            onChange={(e) => setProjectRelationId(e.target.value)}
+            onChange={(e) => {
+              setProjectRelationId(e.target.value);
+              setParentTaskId("");
+            }}
             className={fieldClasses}
           >
             {TEAM_PROJECT_OPTIONS.map((opt) => (
@@ -417,85 +321,284 @@ export default function TeamTaskForm() {
         </div>
 
         <div>
-          <span className={labelClasses}>Etiquetas</span>
-          <div className="flex flex-wrap gap-2">
-            {TEAM_TAG_SUGGESTIONS.map((tag) => {
-              const active = selectedTags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => toggleTag(tag)}
-                  className={
-                    "rounded-full border px-2.5 py-1 text-xs font-medium transition " +
-                    (active
-                      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
-                      : "border-[#efefef] bg-[#f7f7f5] text-[#787774] hover:border-[#d3d1cb]")
-                  }
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-          <input type="hidden" name="tags" value={selectedTags.join(",")} />
+          <label htmlFor="assigneeId" className={labelClasses}>Responsable</label>
+          <select
+            id="assigneeId"
+            name="assigneeId"
+            required
+            disabled={busy || loadingOptions}
+            value={assigneeId}
+            onChange={(e) => setAssigneeId(e.target.value)}
+            className={fieldClasses}
+          >
+            <option value="">
+              {loadingOptions ? "Cargando equipo…" : "Selecciona una persona"}
+            </option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
         </div>
-      </div>
-
-      <div className={sectionClasses}>
-        <SectionTitle>Detalle</SectionTitle>
 
         <div>
-          <label htmlFor="bodyMarkdown" className={labelClasses}>
-            Cuerpo de la tarea <span className="font-normal text-[#9b9a97]">(markdown)</span>
+          <span className={labelClasses}>Tipo</span>
+          <div className="flex gap-2">
+            {TICKET_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                disabled={busy}
+                className={typeButtonClass(ticketType === type)}
+                onClick={() => {
+                  setTicketType(type);
+                  setAiPrepared(false);
+                }}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+          <input type="hidden" name="ticketType" value={ticketType} />
+        </div>
+
+        <div>
+          <label htmlFor="parentTaskId" className={labelClasses}>
+            Épica / tarea padre <span className="font-normal text-[#9b9a97]">(opcional)</span>
           </label>
-          <textarea
-            id="bodyMarkdown"
-            name="bodyMarkdown"
-            value={bodyMarkdown}
-            onChange={(e) => setBodyMarkdown(e.target.value)}
+          <select
+            id="parentTaskId"
+            name="parentTaskId"
+            disabled={busy || loadingOptions}
+            value={parentTaskId}
+            onChange={(e) => setParentTaskId(e.target.value)}
+            className={fieldClasses}
+          >
+            <option value="">Sin padre — tarea independiente</option>
+            {parents.map((p) => (
+              <option key={p.id} value={p.id}>
+                [{p.ticketType}] {p.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          disabled={busy || !rawInput.trim()}
+          onClick={handlePrepare}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[#2383e2] bg-[#e8f3fc] px-4 py-2.5 text-sm font-medium text-[#1a73d1] transition hover:bg-[#d6ebfa] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {status === "structuring" && <Spinner />}
+          {status === "structuring" ? "Preparando con IA…" : "Preparar con IA"}
+        </button>
+      </div>
+
+      {/* --- Subtareas (opcional) --- */}
+      <div className={sectionClasses}>
+        <SectionTitle>Subtareas</SectionTitle>
+        <p className="text-xs text-[#9b9a97]">
+          Opcional. La IA sugiere subtareas en épicas; también puedes agregarlas manualmente.
+        </p>
+
+          {subtasks.length === 0 ? (
+            <p className="text-sm text-[#787774]">Prepara con IA o agrega subtareas manualmente.</p>
+          ) : (
+            <ul className="space-y-2">
+              {subtasks.map((sub, index) => (
+                <li key={index} className="flex items-start gap-2 rounded-md border border-[#efefef] p-2">
+                  <input
+                    type="checkbox"
+                    checked={sub.enabled}
+                    disabled={busy}
+                    onChange={(e) => updateSubtask(index, { enabled: e.target.checked })}
+                    className="mt-2"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <input
+                      type="text"
+                      value={sub.title}
+                      disabled={busy}
+                      onChange={(e) => updateSubtask(index, { title: e.target.value })}
+                      placeholder="Título de subtarea"
+                      className={fieldClasses}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => removeSubtask(index)}
+                    className="shrink-0 text-xs text-[#b5403a] hover:underline"
+                  >
+                    Quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            type="button"
             disabled={busy}
-            rows={8}
-            placeholder={"## Contexto\n...\n\n## Objetivo\n...\n\n## Criterios de aceptación\n- ..."}
-            className={`${fieldClasses} resize-y font-mono text-xs`}
-          />
+            onClick={addSubtask}
+            className="text-sm text-[#2383e2] hover:underline"
+          >
+            + Agregar subtarea
+          </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="prLink" className={labelClasses}>
-              Enlace PR <span className="font-normal text-[#9b9a97]">(opcional)</span>
-            </label>
-            <input
-              id="prLink"
-              name="prLink"
-              type="url"
-              disabled={busy}
-              placeholder="https://github.com/..."
-              className={fieldClasses}
-            />
-          </div>
-          <div>
-            <label htmlFor="hours" className={labelClasses}>
-              Horas estimadas <span className="font-normal text-[#9b9a97]">(opcional)</span>
-            </label>
-            <input
-              id="hours"
-              name="hours"
-              type="number"
-              min="0"
-              step="0.5"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-              disabled={busy}
-              placeholder="Ej. 4"
-              className={fieldClasses}
-            />
-          </div>
-        </div>
+      {/* --- Preview --- */}
+      {(showPreview || aiPrepared) && (
+        <div className={sectionClasses}>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between text-left"
+            onClick={() => setShowPreview((v) => !v)}
+          >
+            <SectionTitle>Vista previa</SectionTitle>
+            <span className="text-xs text-[#9b9a97]">{showPreview ? "Ocultar" : "Mostrar"}</span>
+          </button>
 
-        <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
+          {showPreview && (
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="title" className={labelClasses}>Título</label>
+                <input
+                  id="title"
+                  name="title"
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={busy}
+                  className={fieldClasses}
+                />
+              </div>
+              <div>
+                <label htmlFor="shortDescription" className={labelClasses}>Descripción corta</label>
+                <textarea
+                  id="shortDescription"
+                  name="shortDescription"
+                  value={shortDescription}
+                  onChange={(e) => setShortDescription(e.target.value)}
+                  disabled={busy}
+                  rows={2}
+                  className={`${fieldClasses} resize-y`}
+                />
+              </div>
+              <div>
+                <label htmlFor="bodyMarkdown" className={labelClasses}>Cuerpo (markdown)</label>
+                <textarea
+                  id="bodyMarkdown"
+                  name="bodyMarkdown"
+                  value={bodyMarkdown}
+                  onChange={(e) => setBodyMarkdown(e.target.value)}
+                  disabled={busy}
+                  rows={6}
+                  className={`${fieldClasses} resize-y font-mono text-xs`}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- Avanzado --- */}
+      <div className={sectionClasses}>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left"
+          onClick={() => setShowAdvanced((v) => !v)}
+        >
+          <SectionTitle>Detalles avanzados</SectionTitle>
+          <span className="text-xs text-[#9b9a97]">
+            {showAdvanced ? "Ocultar" : "Mostrar"} (dev / QA)
+          </span>
+        </button>
+
+        {showAdvanced && (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="priority" className={labelClasses}>Prioridad</label>
+                <select
+                  id="priority"
+                  name="priority"
+                  disabled={busy}
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className={fieldClasses}
+                >
+                  {TEAM_PRIORITIES.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="category" className={labelClasses}>Categoría</label>
+                <select
+                  id="category"
+                  name="category"
+                  disabled={busy}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className={fieldClasses}
+                >
+                  {TEAM_CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <span className={labelClasses}>Etiquetas</span>
+              <div className="flex flex-wrap gap-2">
+                {TEAM_TAG_SUGGESTIONS.map((tag) => {
+                  const active = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => toggleTag(tag)}
+                      className={
+                        "rounded-full border px-2.5 py-1 text-xs font-medium transition " +
+                        (active
+                          ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
+                          : "border-[#efefef] bg-[#f7f7f5] text-[#787774] hover:border-[#d3d1cb]")
+                      }
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+              <input type="hidden" name="tags" value={selectedTags.join(",")} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="prLink" className={labelClasses}>Enlace PR</label>
+                <input id="prLink" name="prLink" type="url" disabled={busy} className={fieldClasses} />
+              </div>
+              <div>
+                <label htmlFor="hours" className={labelClasses}>Horas estimadas</label>
+                <input
+                  id="hours"
+                  name="hours"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  disabled={busy}
+                  className={fieldClasses}
+                />
+              </div>
+            </div>
+
+            <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
+          </div>
+        )}
       </div>
 
       {status === "error" && (
@@ -506,12 +609,18 @@ export default function TeamTaskForm() {
 
       <button
         type="submit"
-        disabled={busy || (!title.trim() && !rawInput.trim())}
+        disabled={busy || !rawInput.trim()}
         className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
       >
         {status === "loading" && <Spinner />}
-        {status === "loading" ? "Creando tarea…" : "Crear tarea en Notion"}
+        {status === "loading" ? "Creando en Notion…" : "Crear en Notion"}
       </button>
+
+      {!aiPrepared && rawInput.trim() && (
+        <p className="text-center text-xs text-[#9b9a97]">
+          Si no preparas con IA, se estructurará automáticamente al crear.
+        </p>
+      )}
     </form>
   );
 }

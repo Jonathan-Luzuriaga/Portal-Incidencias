@@ -117,30 +117,29 @@ Configurado en `next.config.ts` y `vercel.json`.
 - Etiquetas automáticas vía `getNotionTags()` — incluye `Incidencias`, `qa`, `bugs`, etc.
 - Tipo de ticket por defecto: **Bug**.
 
-### Portal equipo
+### Portal equipo (`/tareas`) — ingesta PM
 
-#### Formulario (`components/TeamTaskForm.tsx`)
+Flujo simplificado (4 decisiones del PM + IA):
 
-- **Descripción en bruto** + botón **Estructurar con IA**.
-- Campos: título, descripción corta, tipo (Tarea/Bug/Épica), prioridad, cliente, categoría, proyecto cliente, proyecto Notion, etiquetas (chips), cuerpo markdown, PR link, horas, evidencias.
-- Crear directo con texto en bruto (IA en servidor) o estructurar primero y revisar.
+1. **Tu idea** (texto en bruto)
+2. **Proyecto** (Notion)
+3. **Responsable** (persona del workspace)
+4. **Tipo** — Épica | Tarea | Bug
+5. Opcional: **épica/tarea padre**, **subtareas** (sugeridas por IA o manuales)
 
-#### DeepSeek equipo (`lib/deepseek-team.ts`)
+La IA estructura título, descripción, cuerpo markdown, prioridad, categoría y etiquetas.  
+Detalles avanzados (PR, horas, evidencias) quedan colapsados para dev/QA.
 
-- Infiere tipo, prioridad, categoría, etiquetas, cliente y proyecto cliente.
-- **Bug** → secciones: Contexto, Detalle técnico, Pasos para reproducir, Criterio de cierre.
-- **Tarea/Épica** → Contexto, Objetivo, Alcance, Criterios de aceptación.
-- Fallback con plantilla mínima si falla DeepSeek o no hay API key.
+APIs equipo:
 
-#### API equipo
+- `GET /api/tareas/opciones?proyecto=<id>` — usuarios + tareas padre del proyecto
+- `POST /api/tareas/estructurar` — preview con IA (incluye subtareas sugeridas)
+- `POST /api/tareas` — crea tarea principal + subtareas enlazadas en Notion
 
-- `POST /api/tareas` — crear tarea (multipart, evidencias).
-- `POST /api/tareas/estructurar` — preview JSON con campos estructurados por IA.
+Properties Notion adicionales (env opcional):
 
-#### Notion equipo (`lib/team-notion.ts`)
-
-- Etiquetas vía `getDefaultTeamTags()` — base `tareas`; `bugs` si es Bug.
-- Sin etiqueta `Incidencias` (reservada al flujo cliente).
+- `NOTION_PROP_ASSIGNEE` → `Responsable` (person)
+- `NOTION_PROP_PARENT` → `Link pagina` (relation a padre)
 
 ---
 
@@ -197,6 +196,7 @@ app/
   api/incidencias/documento/route.ts
   api/tareas/route.ts
   api/tareas/estructurar/route.ts
+  api/tareas/opciones/route.ts
 
 components/
   IncidentPortal.tsx
@@ -213,6 +213,8 @@ lib/
   incident-pipeline.ts
   team-pipeline.ts
   team-notion.ts
+  team-notion-meta.ts
+  team-notion-config.ts
   team-profiles.ts
   team-types.ts
   project-profiles.ts

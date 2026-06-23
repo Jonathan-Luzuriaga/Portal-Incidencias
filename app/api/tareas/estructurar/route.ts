@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { formatTeamTaskFromRaw } from "@/lib/deepseek-team";
-import { resolveTeamClientProject } from "@/lib/team-profiles";
 import {
-  TeamClient,
+  getProjectMetadata,
+  resolveTeamProject,
+  TEAM_PROJECT_OPTIONS,
+} from "@/lib/team-profiles";
+import {
   TeamStructureApiResponse,
-  TEAM_CLIENTS,
+  TEAM_TICKET_TYPES,
+  TeamTicketType,
 } from "@/lib/team-types";
 import { ServiceError } from "@/lib/types";
 
@@ -15,7 +19,11 @@ function bad(error: string, status = 400) {
 }
 
 export async function POST(request: Request): Promise<NextResponse<TeamStructureApiResponse>> {
-  let body: { rawDescription?: string; clientProject?: string; client?: string };
+  let body: {
+    rawDescription?: string;
+    ticketType?: string;
+    projectRelationId?: string;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -30,12 +38,20 @@ export async function POST(request: Request): Promise<NextResponse<TeamStructure
     return bad("La descripción es demasiado larga (máx. 15 000 caracteres).");
   }
 
-  const clientProject = resolveTeamClientProject(body.clientProject);
-  const clientRaw = String(body.client ?? "").trim() as TeamClient;
-  const client = TEAM_CLIENTS.includes(clientRaw) ? clientRaw : undefined;
+  const ticketTypeRaw = String(body.ticketType ?? "Tarea").trim() as TeamTicketType;
+  const ticketType = TEAM_TICKET_TYPES.includes(ticketTypeRaw) ? ticketTypeRaw : "Tarea";
+  const projectRelationId = resolveTeamProject(body.projectRelationId);
+  const projectLabel =
+    TEAM_PROJECT_OPTIONS.find((p) => p.relationId === projectRelationId)?.label ?? "";
+  const meta = getProjectMetadata(projectRelationId);
 
   try {
-    const formatted = await formatTeamTaskFromRaw(rawDescription, { clientProject, client });
+    const formatted = await formatTeamTaskFromRaw(rawDescription, {
+      ticketType,
+      clientProject: meta.clientProject,
+      client: meta.client,
+      projectLabel,
+    });
 
     return NextResponse.json<TeamStructureApiResponse>({ ok: true, formatted });
   } catch (err) {

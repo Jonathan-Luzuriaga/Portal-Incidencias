@@ -44,6 +44,12 @@ export function notionUrl(url: string) {
   return { url };
 }
 
+export function notionPeople(userIds: string[]) {
+  return {
+    people: userIds.filter(Boolean).map((id) => ({ id })),
+  };
+}
+
 export function parseCsvValues(raw: string): string[] {
   return raw
     .split(",")

@@ -15,7 +15,7 @@ export default function TeamTasksPage() {
       <header className="mb-5">
         <h1 className="text-lg font-semibold text-[#37352f]">Nueva tarea</h1>
         <p className="mt-1 text-sm text-[#787774]">
-          Portal interno para dev, PM y QA. Crea tareas directamente en la BD de Notion.
+          Ingesta rápida para PM: idea, proyecto, responsable y tipo. La IA estructura el resto.
         </p>
       </header>
       <Suspense fallback={<FormFallback />}>

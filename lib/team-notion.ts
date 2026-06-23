@@ -7,6 +7,7 @@ import {
   notionDate,
   notionMultiSelect,
   notionNumber,
+  notionPeople,
   notionRelation,
   notionRichText,
   notionSelect,
@@ -15,19 +16,20 @@ import {
   notionUrl,
 } from "./notion-properties";
 import { resolveCurrentSprintId } from "./notion-sprint";
+import { getTeamNotionProps } from "./team-notion-config";
 import { getDefaultTeamTags } from "./team-profiles";
 import type { TeamTaskFormData } from "./team-types";
 import { ServiceError } from "./types";
 
 /**
  * Crea una tarea en Notion desde el portal interno de equipo.
- * Sin formateo DeepSeek en creación directa; el pipeline puede estructurar antes vía deepseek-team.
  */
 export async function createTeamTaskPage(
   form: TeamTaskFormData,
-  fileUploadIds: string[]
+  fileUploadIds: string[] = []
 ): Promise<CreatePageResponse> {
   const config = getNotionConfig();
+  const teamProps = getTeamNotionProps();
   const notion = getNotionClient();
   const { props, defaults } = config;
   const today = todayIsoDate();
@@ -52,6 +54,14 @@ export async function createTeamTaskPage(
     [props.status]: notionStatus(defaults.status),
     [props.tags]: notionMultiSelect(tags),
   };
+
+  if (form.assigneeId) {
+    properties[teamProps.assignee] = notionPeople([form.assigneeId]);
+  }
+
+  if (form.parentTaskId) {
+    properties[teamProps.parent] = notionRelation([form.parentTaskId]);
+  }
 
   if (form.prLink) {
     properties["PR link"] = notionUrl(form.prLink);

@@ -19,6 +19,41 @@ export const TEAM_PROJECT_OPTIONS: TeamProjectOption[] = [
   { relationId: "45dac611-aded-4775-b62c-99f2f1bb945d", label: "Bago — MM360" },
 ];
 
+/** Cliente y Proyecto Cliente inferidos al elegir Proyecto (Notion). */
+export const PROJECT_METADATA: Record<
+  string,
+  { clientProject: string; client: TeamClient }
+> = {
+  "32f4f339-cf21-803b-4a2c-29196fe31f6": {
+    clientProject: "[ML][Gestion]",
+    client: "Manticore Labs",
+  },
+  "32d4f339-cf21-80d7-a5a8d860913a99b1": {
+    clientProject: "[BAGO][ZONALES-MG]",
+    client: "Bago",
+  },
+  "32f4f339-cf21-8003-b4a2-c29196fe31f6": {
+    clientProject: "[BAGO][SICAB-MG]",
+    client: "Bago",
+  },
+  "45dac611-aded-4775-b62c-99f2f1bb945d": {
+    clientProject: "[Bago][MM360]",
+    client: "Bago",
+  },
+};
+
+export function getProjectMetadata(projectRelationId: string): {
+  clientProject: string;
+  client: TeamClient;
+} {
+  return (
+    PROJECT_METADATA[projectRelationId] ?? {
+      clientProject: DEFAULT_TEAM_CLIENT_PROJECT,
+      client: DEFAULT_TEAM_CLIENT,
+    }
+  );
+}
+
 /** Valores de Proyecto Cliente según la BD Tareas de Notion. */
 export const TEAM_CLIENT_PROJECT_OPTIONS: TeamClientProjectOption[] = [
   { value: "[ML][Gestion]", label: "ML — Gestión" },

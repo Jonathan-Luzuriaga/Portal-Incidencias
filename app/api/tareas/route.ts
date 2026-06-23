@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { processAndCreateTeamTask } from "@/lib/team-pipeline";
 import {
-  resolveTeamClientProject,
+  getProjectMetadata,
   resolveTeamProject,
   TEAM_CATEGORY_OPTIONS,
-  TEAM_CLIENT_PROJECT_OPTIONS,
   TEAM_PROJECT_OPTIONS,
 } from "@/lib/team-profiles";
 import {
-  TEAM_CLIENTS,
   TEAM_PRIORITIES,
   TEAM_TICKET_TYPES,
   TeamTaskApiResponse,
   TeamTaskFormData,
-  TeamClient,
   TeamPriority,
+  TeamSubtaskInput,
   TeamTicketType,
 } from "@/lib/team-types";
 import { ServiceError } from "@/lib/types";
@@ -34,6 +32,23 @@ function parseTags(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseSubtasks(raw: string): TeamSubtaskInput[] {
+  if (!raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as TeamSubtaskInput[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((s) => s && typeof s.title === "string" && s.title.trim())
+      .map((s) => ({
+        title: s.title.trim(),
+        shortDescription: String(s.shortDescription ?? s.title).trim(),
+        enabled: s.enabled !== false,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function parseForm(
   form: FormData,
   rawInput: string,
@@ -44,33 +59,31 @@ function parseForm(
   const bodyMarkdown = String(form.get("bodyMarkdown") ?? "").trim();
   const ticketType = String(form.get("ticketType") ?? "").trim() as TeamTicketType;
   const priority = String(form.get("priority") ?? "").trim() as TeamPriority;
-  const client = String(form.get("client") ?? "").trim() as TeamClient;
-  const clientProject = resolveTeamClientProject(String(form.get("clientProject") ?? ""));
   const projectRelationId = resolveTeamProject(String(form.get("projectRelationId") ?? ""));
+  const assigneeId = String(form.get("assigneeId") ?? "").trim();
+  const parentTaskId = String(form.get("parentTaskId") ?? "").trim();
   const category = String(form.get("category") ?? "").trim();
   const tags = parseTags(String(form.get("tags") ?? ""));
+  const subtasks = parseSubtasks(String(form.get("subtasksJson") ?? ""));
   const prLink = String(form.get("prLink") ?? "").trim();
   const hoursRaw = String(form.get("hours") ?? "").trim();
   const hours = hoursRaw ? Number(hoursRaw) : null;
 
+  const meta = getProjectMetadata(projectRelationId);
   const willUseAi = useAi || Boolean(rawInput && !title);
 
-  if (!title && !rawInput) {
-    return "El título es obligatorio (o pega una descripción en bruto).";
+  if (!rawInput && !title) {
+    return "Describe la idea o espera el preview de la IA.";
   }
-  if (!shortDescription && !rawInput && !willUseAi) {
-    return "La descripción corta es obligatoria (o pega una descripción en bruto).";
-  }
-  if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo de ticket válido.";
-  if (!TEAM_PRIORITIES.includes(priority)) return "Selecciona una prioridad válida.";
-  if (!TEAM_CLIENTS.includes(client)) return "Selecciona un cliente válido.";
-  if (!TEAM_CLIENT_PROJECT_OPTIONS.some((o) => o.value === clientProject)) {
-    return "Selecciona un Proyecto Cliente válido.";
-  }
+  if (!assigneeId) return "Selecciona a quién se asigna la tarea.";
+  if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo válido.";
   if (!TEAM_PROJECT_OPTIONS.some((o) => o.relationId === projectRelationId)) {
     return "Selecciona un proyecto válido.";
   }
-  if (!willUseAi && !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])) {
+  if (!willUseAi && !TEAM_PRIORITIES.includes(priority)) {
+    return "Selecciona una prioridad válida.";
+  }
+  if (!willUseAi && category && !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])) {
     return "Selecciona una categoría válida.";
   }
   if (prLink && !/^https?:\/\//i.test(prLink)) {
@@ -85,12 +98,15 @@ function parseForm(
     shortDescription,
     bodyMarkdown,
     ticketType,
-    priority,
-    client,
-    clientProject,
+    priority: TEAM_PRIORITIES.includes(priority) ? priority : "Media",
+    client: meta.client,
+    clientProject: meta.clientProject,
     projectRelationId,
-    category,
+    assigneeId,
+    parentTaskId,
+    category: category || "Workflows",
     tags,
+    subtasks,
     prLink,
     hours,
   };
@@ -124,18 +140,24 @@ export async function POST(request: Request): Promise<NextResponse<TeamTaskApiRe
   }
 
   try {
-    const result = await processAndCreateTeamTask(parsed, files, {
+    const created = await processAndCreateTeamTask(parsed, files, {
       rawDescription: rawInput,
       useAi: useAi || Boolean(rawInput && !parsed.title),
     });
 
+    const main = created[0];
+    if (!main) {
+      return bad("No se creó ninguna tarea.", 500);
+    }
+
     return NextResponse.json<TeamTaskApiResponse>(
       {
         ok: true,
-        pageId: result.pageId,
-        pageUrl: result.pageUrl,
-        taskTitle: result.taskTitle,
-        evidenceCount: result.evidenceCount,
+        pageId: main.pageId,
+        pageUrl: main.pageUrl,
+        taskTitle: main.taskTitle,
+        evidenceCount: main.evidenceCount,
+        created,
       },
       { status: 201 }
     );

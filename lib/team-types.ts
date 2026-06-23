@@ -10,7 +10,25 @@ export type TeamClient = "Bago" | "Manticore Labs" | "Plasticaucho";
 
 export const TEAM_CLIENTS: TeamClient[] = ["Manticore Labs", "Bago", "Plasticaucho"];
 
-/** Datos del formulario interno de equipo. */
+export interface TeamSubtaskInput {
+  title: string;
+  shortDescription: string;
+  enabled: boolean;
+}
+
+export interface TeamUserOption {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface TeamParentOption {
+  id: string;
+  title: string;
+  ticketType: string;
+}
+
+/** Datos del formulario interno de equipo (ingesta PM). */
 export interface TeamTaskFormData {
   title: string;
   shortDescription: string;
@@ -20,10 +38,20 @@ export interface TeamTaskFormData {
   client: TeamClient;
   clientProject: string;
   projectRelationId: string;
+  assigneeId: string;
+  parentTaskId: string;
   category: string;
   tags: string[];
+  subtasks: TeamSubtaskInput[];
   prLink: string;
   hours: number | null;
+}
+
+export interface CreatedTeamTaskSummary {
+  pageId: string;
+  pageUrl: string | null;
+  taskTitle: string;
+  evidenceCount: number;
 }
 
 export interface TeamTaskApiSuccess {
@@ -32,6 +60,7 @@ export interface TeamTaskApiSuccess {
   pageUrl: string | null;
   taskTitle: string;
   evidenceCount: number;
+  created: CreatedTeamTaskSummary[];
 }
 
 export interface TeamTaskApiError {
@@ -40,6 +69,11 @@ export interface TeamTaskApiError {
 }
 
 export type TeamTaskApiResponse = TeamTaskApiSuccess | TeamTaskApiError;
+
+export interface FormattedSubtask {
+  title: string;
+  shortDescription: string;
+}
 
 /** Resultado estructurado por DeepSeek a partir de texto en bruto. */
 export interface FormattedTeamTask {
@@ -53,6 +87,7 @@ export interface FormattedTeamTask {
   client: TeamClient;
   clientProject: string;
   hours: number | null;
+  subtasks: FormattedSubtask[];
 }
 
 export interface TeamStructureApiSuccess {
@@ -66,3 +101,16 @@ export interface TeamStructureApiError {
 }
 
 export type TeamStructureApiResponse = TeamStructureApiSuccess | TeamStructureApiError;
+
+export interface TeamOptionsApiSuccess {
+  ok: true;
+  users: TeamUserOption[];
+  parents: TeamParentOption[];
+}
+
+export interface TeamOptionsApiError {
+  ok: false;
+  error: string;
+}
+
+export type TeamOptionsApiResponse = TeamOptionsApiSuccess | TeamOptionsApiError;

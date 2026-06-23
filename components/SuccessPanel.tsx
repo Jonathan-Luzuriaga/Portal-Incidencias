@@ -4,9 +4,10 @@ interface SuccessPanelProps {
   title: string;
   items: CreatedIncidentSummary[];
   onReset: () => void;
+  resetLabel?: string;
 }
 
-export function SuccessPanel({ title, items, onReset }: SuccessPanelProps) {
+export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro reporte" }: SuccessPanelProps) {
   return (
     <div className="rounded-lg border border-[#efefef] bg-white p-6">
       <div className="text-center">
@@ -51,7 +52,7 @@ export function SuccessPanel({ title, items, onReset }: SuccessPanelProps) {
           onClick={onReset}
           className="inline-flex items-center justify-center rounded-md border border-[#efefef] bg-white px-4 py-2 text-sm font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
         >
-          Enviar otro reporte
+          {resetLabel}
         </button>
       </div>
     </div>

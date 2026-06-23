@@ -5,6 +5,7 @@ import {
   resolveTeamClientProject,
 } from "./team-profiles";
 import type {
+  FormattedSubtask,
   FormattedTeamTask,
   TeamClient,
   TeamPriority,
@@ -12,43 +13,34 @@ import type {
 } from "./team-types";
 import { TEAM_CLIENTS, TEAM_PRIORITIES, TEAM_TICKET_TYPES } from "./team-types";
 
-const SYSTEM_PROMPT = `Eres un asistente de gestión de proyectos en Manticore Labs. Recibes una descripción en bruto (notas, mensaje de Slack, idea suelta, bug informal) y la transformas en una tarea lista para Notion.
+const SYSTEM_PROMPT = `Eres un asistente de gestión de proyectos en Manticore Labs. Recibes una descripción en bruto y la transformas en una tarea lista para Notion.
 
-Devuelve ÚNICAMENTE un JSON válido (sin markdown envolvente) con esta estructura exacta:
+Devuelve ÚNICAMENTE un JSON válido con esta estructura:
 {
   "title": "título claro y accionable (máx. 120 caracteres)",
-  "shortDescription": "resumen técnico para la columna Descripción (máx. 200 caracteres)",
-  "bodyMarkdown": "cuerpo en markdown con las secciones indicadas",
-  "ticketType": "Tarea | Bug | Épica",
+  "shortDescription": "resumen para columna Descripción (máx. 200 caracteres)",
+  "bodyMarkdown": "cuerpo en markdown con secciones",
   "priority": "Alta | Media | Baja",
-  "category": "una de las categorías permitidas",
+  "category": "una categoría permitida",
   "tags": ["etiqueta1", "etiqueta2"],
-  "client": "Manticore Labs | Bago | Plasticaucho",
-  "clientProject": "valor exacto de Proyecto Cliente",
-  "hours": null o número estimado de horas
+  "hours": null o número,
+  "subtasks": [{ "title": "...", "shortDescription": "..." }]
 }
 
-Reglas para bodyMarkdown según ticketType:
+NO incluyas ticketType, client ni clientProject en el JSON: el PM ya los eligió.
 
-Si ticketType es "Bug", usa estas secciones (## con emoji):
-## 📍 Contexto
-## 🔍 Detalle técnico
-## 👣 Pasos para reproducir
-## ✅ Criterio de cierre
+bodyMarkdown según tipo indicado por el PM:
+- Bug: ## 📍 Contexto, ## 🔍 Detalle técnico, ## 👣 Pasos para reproducir, ## ✅ Criterio de cierre
+- Tarea/Épica: ## 📍 Contexto, ## 🎯 Objetivo, ## 📐 Alcance, ## ✅ Criterios de aceptación
 
-Si ticketType es "Tarea" o "Épica", usa:
-## 📍 Contexto
-## 🎯 Objetivo
-## 📐 Alcance
-## ✅ Criterios de aceptación
+subtasks:
+- Si el tipo es Épica o la idea tiene pasos claramente separables, sugiere 2-6 subtareas concretas.
+- Si es Bug o idea simple, devuelve subtasks: [].
 
-Reglas generales:
-- Corrige ortografía; no inventes requisitos que no estén en el texto.
-- Si falta información, indícalo brevemente en la sección correspondiente.
-- tags: incluye siempre "tareas"; añade "bugs" si es Bug; infiere etiquetas técnicas (Frontend, Backend, qa, notion, cursor, zonales, sgc, etc.) según el contenido.
-- clientProject: elige el valor exacto más coherente con el texto.
-- priority: Alta solo si bloquea producción o es crítico; Media por defecto en tareas normales.
-- hours: estima solo si el texto da pistas de esfuerzo; si no, null.`;
+Reglas:
+- Corrige ortografía; no inventes requisitos.
+- tags: incluye "tareas"; añade "bugs" solo si el tipo es Bug.
+- priority: Alta solo si es crítico o bloqueante.`;
 
 interface DeepSeekResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -57,16 +49,15 @@ interface DeepSeekResponse {
 export interface TeamFormatHints {
   clientProject?: string;
   client?: TeamClient;
+  ticketType?: TeamTicketType;
+  projectLabel?: string;
 }
 
 function allowedValuesPrompt(): string {
   return [
-    `ticketType permitidos: ${TEAM_TICKET_TYPES.join(", ")}`,
-    `priority permitidos: ${TEAM_PRIORITIES.join(", ")}`,
-    `category permitidos: ${TEAM_CATEGORY_OPTIONS.join(", ")}`,
-    `client permitidos: ${TEAM_CLIENTS.join(", ")}`,
-    `clientProject permitidos: ${TEAM_CLIENT_PROJECT_OPTIONS.map((o) => o.value).join(", ")}`,
-    `tags sugeridos (usa solo los que apliquen): ${TEAM_TAG_SUGGESTIONS.join(", ")}`,
+    `priority: ${TEAM_PRIORITIES.join(", ")}`,
+    `category: ${TEAM_CATEGORY_OPTIONS.join(", ")}`,
+    `tags sugeridos: ${TEAM_TAG_SUGGESTIONS.join(", ")}`,
   ].join("\n");
 }
 
@@ -75,11 +66,30 @@ function firstLine(text: string): string {
   return line ?? "Nueva tarea";
 }
 
+function sanitizeSubtasks(raw: unknown): FormattedSubtask[] {
+  if (!Array.isArray(raw)) return [];
+  const result: FormattedSubtask[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const title = String((item as FormattedSubtask).title ?? "").trim();
+    if (!title) continue;
+    result.push({
+      title: title.slice(0, 120),
+      shortDescription: String((item as FormattedSubtask).shortDescription ?? title).slice(0, 200),
+    });
+    if (result.length >= 8) break;
+  }
+  return result;
+}
+
 function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
   const title = firstLine(raw).slice(0, 120);
-  const clientProject = resolveTeamClientProject(hints.clientProject);
-  const lower = raw.toLowerCase();
-  const isBug = /\bbug\b|\berror\b|\bfalla\b|\bincidencia\b/.test(lower);
+  const ticketType = hints.ticketType ?? "Tarea";
+  const meta = hints.clientProject
+    ? { clientProject: resolveTeamClientProject(hints.clientProject), client: hints.client ?? "Manticore Labs" as TeamClient }
+    : { clientProject: "[ML][Gestion]", client: "Manticore Labs" as TeamClient };
+
+  const isBug = ticketType === "Bug";
 
   return {
     title,
@@ -87,13 +97,14 @@ function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
     bodyMarkdown: isBug
       ? `## 📍 Contexto\n${raw}\n\n## 🔍 Detalle técnico\n(Por completar)\n\n## 👣 Pasos para reproducir\n1. \n\n## ✅ Criterio de cierre\nResuelto si: el comportamiento coincide con lo esperado.`
       : `## 📍 Contexto\n${raw}\n\n## 🎯 Objetivo\n(Por completar)\n\n## 📐 Alcance\n(Por completar)\n\n## ✅ Criterios de aceptación\n- `,
-    ticketType: isBug ? "Bug" : "Tarea",
+    ticketType,
     priority: "Media",
     category: isBug ? "BUG" : "Workflows",
     tags: isBug ? ["tareas", "bugs"] : ["tareas"],
-    client: hints.client ?? "Manticore Labs",
-    clientProject,
+    client: meta.client,
+    clientProject: meta.clientProject,
     hours: null,
+    subtasks: ticketType === "Épica" ? [{ title: "Definir alcance", shortDescription: "Detallar entregables de la épica" }] : [],
   };
 }
 
@@ -110,9 +121,8 @@ function sanitizeTags(tags: unknown, ticketType: TeamTicketType): string[] {
 
   if (Array.isArray(tags)) {
     for (const tag of tags) {
-      if (typeof tag === "string" && tag.trim()) {
-        const normalized = tag.trim();
-        if (allowed.has(normalized)) result.add(normalized);
+      if (typeof tag === "string" && tag.trim() && allowed.has(tag.trim())) {
+        result.add(tag.trim());
       }
     }
   }
@@ -122,52 +132,63 @@ function sanitizeTags(tags: unknown, ticketType: TeamTicketType): string[] {
   return [...result];
 }
 
-function parseDeepSeekJson(raw: string): Partial<FormattedTeamTask> | null {
+function parseDeepSeekJson(raw: string): Record<string, unknown> | null {
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
-    return JSON.parse(match[0]) as Partial<FormattedTeamTask>;
+    return JSON.parse(match[0]) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
 function sanitizeFormatted(
-  parsed: Partial<FormattedTeamTask>,
-  fallback: FormattedTeamTask
+  parsed: Record<string, unknown>,
+  fallback: FormattedTeamTask,
+  hints: TeamFormatHints
 ): FormattedTeamTask {
-  const ticketType = pickEnum(parsed.ticketType, TEAM_TICKET_TYPES, fallback.ticketType);
-  const clientProjectRaw = typeof parsed.clientProject === "string" ? parsed.clientProject : fallback.clientProject;
+  const ticketType = hints.ticketType ?? fallback.ticketType;
+  const meta = hints.clientProject
+    ? {
+        clientProject: resolveTeamClientProject(hints.clientProject),
+        client: hints.client ?? fallback.client,
+      }
+    : { clientProject: fallback.clientProject, client: fallback.client };
 
   return {
-    title: (parsed.title ?? fallback.title).slice(0, 120),
-    shortDescription: (parsed.shortDescription ?? fallback.shortDescription).slice(0, 200),
-    bodyMarkdown: parsed.bodyMarkdown ?? fallback.bodyMarkdown,
+    title: String(parsed.title ?? fallback.title).slice(0, 120),
+    shortDescription: String(parsed.shortDescription ?? fallback.shortDescription).slice(0, 200),
+    bodyMarkdown: String(parsed.bodyMarkdown ?? fallback.bodyMarkdown),
     ticketType,
-    priority: pickEnum(parsed.priority, TEAM_PRIORITIES, fallback.priority),
-    category: pickEnum(
-      parsed.category,
-      TEAM_CATEGORY_OPTIONS,
-      fallback.category
-    ),
+    priority: pickEnum(parsed.priority as TeamPriority, TEAM_PRIORITIES, fallback.priority),
+    category: pickEnum(parsed.category as string, TEAM_CATEGORY_OPTIONS, fallback.category),
     tags: sanitizeTags(parsed.tags, ticketType),
-    client: pickEnum(parsed.client, TEAM_CLIENTS, fallback.client),
-    clientProject: resolveTeamClientProject(clientProjectRaw),
-    hours:
-      typeof parsed.hours === "number" && parsed.hours > 0 ? parsed.hours : null,
+    client: meta.client,
+    clientProject: meta.clientProject,
+    hours: typeof parsed.hours === "number" && parsed.hours > 0 ? parsed.hours : null,
+    subtasks: sanitizeSubtasks(parsed.subtasks).length > 0
+      ? sanitizeSubtasks(parsed.subtasks)
+      : fallback.subtasks,
   };
 }
 
 /**
  * Transforma texto en bruto en una tarea estructurada para Notion.
- * Si DeepSeek falla o no hay API key, usa plantilla mínima (fallback).
+ * El tipo de ticket y proyecto los define el PM (hints), no la IA.
  */
 export async function formatTeamTaskFromRaw(
   rawDescription: string,
   hints: TeamFormatHints = {}
 ): Promise<FormattedTeamTask> {
   const raw = rawDescription.trim();
-  const fallback = buildFallback(raw, hints);
+  const projectMeta = hints.clientProject
+    ? { clientProject: hints.clientProject, client: hints.client }
+    : undefined;
+  const fallback = buildFallback(raw, {
+    ...hints,
+    clientProject: projectMeta?.clientProject ?? hints.clientProject,
+    client: projectMeta?.client ?? hints.client,
+  });
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -181,8 +202,9 @@ export async function formatTeamTaskFromRaw(
   const userContent = [
     "Valores permitidos:",
     allowedValuesPrompt(),
-    hints.clientProject ? `Pista proyecto cliente: ${hints.clientProject}` : "",
-    hints.client ? `Pista cliente: ${hints.client}` : "",
+    hints.ticketType ? `Tipo elegido por PM (usar para plantilla bodyMarkdown): ${hints.ticketType}` : "",
+    hints.projectLabel ? `Proyecto: ${hints.projectLabel}` : "",
+    hints.clientProject ? `Proyecto Cliente: ${hints.clientProject}` : "",
     "",
     "Descripción en bruto:",
     raw,
@@ -218,12 +240,12 @@ export async function formatTeamTaskFromRaw(
     if (!content) return fallback;
 
     const parsed = parseDeepSeekJson(content);
-    if (!parsed?.title || !parsed.bodyMarkdown) {
+    if (!parsed?.title && !parsed?.bodyMarkdown) {
       console.warn("[deepseek-team] JSON inválido. Se usa plantilla fallback.");
       return fallback;
     }
 
-    return sanitizeFormatted(parsed, fallback);
+    return sanitizeFormatted(parsed, fallback, hints);
   } catch (err) {
     console.warn("[deepseek-team] Error:", err);
     return fallback;
