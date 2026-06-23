@@ -186,9 +186,31 @@ export async function listClientProjectOptions(): Promise<TeamClientProjectOptio
   }
 }
 
+async function resolvePersonUser(
+  notion: ReturnType<typeof getNotionClient>,
+  id: string,
+  fallbackName?: string | null
+): Promise<TeamUserOption | null> {
+  try {
+    const u = await notion.users.retrieve({ user_id: id });
+    if (u.type !== "person") return null;
+    const name = u.name?.trim() || fallbackName?.trim() || "";
+    if (!name) return null;
+    return {
+      id: u.id,
+      name,
+      avatarUrl: u.avatar_url ?? null,
+    };
+  } catch {
+    const name = fallbackName?.trim();
+    if (!name) return null;
+    return { id, name, avatarUrl: null };
+  }
+}
+
 async function listUsersFromWorkspace(): Promise<TeamUserOption[]> {
   const notion = getNotionClient();
-  const users: TeamUserOption[] = [];
+  const byId = new Map<string, TeamUserOption>();
   let cursor: string | undefined;
 
   do {
@@ -198,19 +220,15 @@ async function listUsersFromWorkspace(): Promise<TeamUserOption[]> {
     });
 
     for (const u of response.results) {
-      if (u.type === "person" && u.name) {
-        users.push({
-          id: u.id,
-          name: u.name,
-          avatarUrl: u.avatar_url ?? null,
-        });
-      }
+      if (u.type !== "person" || byId.has(u.id)) continue;
+      const resolved = await resolvePersonUser(notion, u.id, u.name);
+      if (resolved) byId.set(resolved.id, resolved);
     }
 
     cursor = response.has_more ? (response.next_cursor ?? undefined) : undefined;
   } while (cursor);
 
-  return users;
+  return [...byId.values()];
 }
 
 /** IDs extra vía NOTION_EXTRA_ASSIGNEE_IDS (usuarios que la integración no lista sola). */
@@ -240,53 +258,52 @@ async function listExtraAssignees(): Promise<TeamUserOption[]> {
   return users;
 }
 
-/** Todos los responsables que aparecen en tareas (paginado completo). */
-async function listAssigneesFromTasks(): Promise<TeamUserOption[]> {
+/**
+ * Personas del equipo a partir de toda la actividad en tareas:
+ * Responsable, creador y último editor (captura quien nunca fue asignado).
+ */
+async function listPeopleFromTaskPages(): Promise<TeamUserOption[]> {
   const config = getNotionConfig();
   const teamProps = getTeamNotionProps();
   const dsId = await getDataSourceId(config.databaseId, "tasks");
+  const notion = getNotionClient();
 
   const pages = await queryDataSourceAllPages<{
     id: string;
+    created_by?: { id: string; name?: string | null };
+    last_edited_by?: { id: string; name?: string | null };
     properties: Record<
       string,
       { type?: string; people?: Array<{ id: string; name?: string | null }> }
     >;
   }>(dsId, {
-    filter: {
-      property: teamProps.assignee,
-      people: { is_not_empty: true },
-    },
     sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
   });
 
-  const byId = new Map<string, TeamUserOption>();
-  const notion = getNotionClient();
+  const pending = new Map<string, string | null>();
+
+  function stage(id: string | undefined, name?: string | null) {
+    if (!id) return;
+    const existing = pending.get(id);
+    if (!existing && name?.trim()) pending.set(id, name.trim());
+    else if (!pending.has(id)) pending.set(id, null);
+  }
 
   for (const page of pages) {
-    const people = page.properties[teamProps.assignee]?.people ?? [];
-    for (const person of people) {
-      if (!person.id || byId.has(person.id)) continue;
-
-      let name = person.name?.trim() || "";
-      if (!name) {
-        try {
-          const u = await notion.users.retrieve({ user_id: person.id });
-          if (u.type === "person") name = u.name ?? "";
-        } catch {
-          // omitir
-        }
-      }
-
-      byId.set(person.id, {
-        id: person.id,
-        name: name || "Usuario",
-        avatarUrl: null,
-      });
+    stage(page.created_by?.id, page.created_by?.name);
+    stage(page.last_edited_by?.id, page.last_edited_by?.name);
+    for (const person of page.properties[teamProps.assignee]?.people ?? []) {
+      stage(person.id, person.name);
     }
   }
 
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const users: TeamUserOption[] = [];
+  for (const [id, fallbackName] of pending) {
+    const resolved = await resolvePersonUser(notion, id, fallbackName);
+    if (resolved) users.push(resolved);
+  }
+
+  return users.sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
 /** Usuarios del workspace + responsables en tareas + extras configurados. */
@@ -294,7 +311,7 @@ export async function listTeamUsers(): Promise<TeamUserOption[]> {
   try {
     const [workspace, fromTasks, extra] = await Promise.all([
       listUsersFromWorkspace().catch(() => [] as TeamUserOption[]),
-      listAssigneesFromTasks().catch(() => [] as TeamUserOption[]),
+      listPeopleFromTaskPages().catch(() => [] as TeamUserOption[]),
       listExtraAssignees().catch(() => [] as TeamUserOption[]),
     ]);
 
