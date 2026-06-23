@@ -16,19 +16,31 @@ function bad(error: string, status = 400) {
 
 export async function GET(): Promise<NextResponse<TeamOptionsApiResponse>> {
   try {
-    const [users, projects, clientProjects, parents] = await Promise.all([
+    const [usersR, projectsR, clientProjectsR, parentsR] = await Promise.allSettled([
       listTeamUsers(),
       listNotionProjects(),
       listClientProjectOptions(),
       listParentTasks(),
     ]);
 
+    if (usersR.status === "rejected") {
+      const err = usersR.reason;
+      if (err instanceof ServiceError) return bad(err.message, err.status);
+      throw err;
+    }
+
+    for (const r of [projectsR, clientProjectsR, parentsR]) {
+      if (r.status === "rejected") {
+        console.error("[/api/tareas/opciones] Falla parcial:", r.reason);
+      }
+    }
+
     return NextResponse.json<TeamOptionsApiResponse>({
       ok: true,
-      users,
-      projects,
-      clientProjects,
-      parents,
+      users: usersR.value,
+      projects: projectsR.status === "fulfilled" ? projectsR.value : [],
+      clientProjects: clientProjectsR.status === "fulfilled" ? clientProjectsR.value : [],
+      parents: parentsR.status === "fulfilled" ? parentsR.value : [],
     });
   } catch (err) {
     if (err instanceof ServiceError) {

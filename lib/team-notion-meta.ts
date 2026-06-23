@@ -22,7 +22,7 @@ const PLACEHOLDER_PROJECT_TITLES = new Set([
   "",
 ]);
 
-const PARENT_TICKET_TYPES = ["Épica", "Epica", "Tarea"];
+const PARENT_TICKET_TYPES = ["Épica", "Tarea"];
 
 async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"): Promise<string> {
   if (cache === "tasks" && cachedTasksDataSourceId) return cachedTasksDataSourceId;
@@ -132,38 +132,54 @@ export async function listNotionProjects(): Promise<TeamProjectOption[]> {
   }
 }
 
-/** Opciones de Proyecto Cliente desde el esquema de la BD Tareas. */
+type SchemaProp = {
+  type?: string;
+  multi_select?: { options?: Array<{ name: string }> };
+  select?: { options?: Array<{ name: string }> };
+};
+
+/** Opciones de Proyecto Cliente desde el esquema (data source) de la BD Tareas. */
 export async function listClientProjectOptions(): Promise<TeamClientProjectOption[]> {
   const notion = getNotionClient();
   const config = getNotionConfig();
   const propName = config.props.clientProject;
 
   try {
-    const db = await notion.request<{
-      properties?: Record<
-        string,
-        { type?: string; multi_select?: { options?: Array<{ name: string }> } }
-      >;
-      data_sources?: Array<{
-        properties?: Record<
-          string,
-          { type?: string; multi_select?: { options?: Array<{ name: string }> } }
-        >;
-      }>;
-    }>({
-      path: `databases/${config.databaseId}`,
+    const dsId = await getDataSourceId(config.databaseId, "tasks");
+
+    const ds = await notion.request<{ properties?: Record<string, SchemaProp> }>({
+      path: `data_sources/${dsId}`,
       method: "get",
     });
 
-    const properties = db.properties ?? db.data_sources?.[0]?.properties ?? {};
-    const prop = properties[propName];
-    const options = prop?.multi_select?.options ?? [];
+    let properties = ds.properties ?? {};
 
-    return options
+    if (!properties[propName]) {
+      const db = await notion.request<{
+        properties?: Record<string, SchemaProp>;
+        data_sources?: Array<{ properties?: Record<string, SchemaProp> }>;
+      }>({
+        path: `databases/${config.databaseId}`,
+        method: "get",
+      });
+      properties = db.properties ?? db.data_sources?.[0]?.properties ?? properties;
+    }
+
+    const prop = properties[propName];
+    const options = prop?.multi_select?.options ?? prop?.select?.options ?? [];
+
+    const mapped = options
       .map((o) => o.name)
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "es"))
       .map((value) => ({ value, label: value }));
+
+    if (mapped.length === 0) {
+      const { TEAM_CLIENT_PROJECT_OPTIONS } = await import("./team-profiles");
+      return TEAM_CLIENT_PROJECT_OPTIONS;
+    }
+
+    return mapped;
   } catch {
     const { TEAM_CLIENT_PROJECT_OPTIONS } = await import("./team-profiles");
     return TEAM_CLIENT_PROJECT_OPTIONS;

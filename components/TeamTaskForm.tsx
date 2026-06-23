@@ -81,12 +81,10 @@ export default function TeamTaskForm() {
   const [scope, setScope] = useState<TeamScope>("Frontend");
   const [assigneeId, setAssigneeId] = useState("");
   const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
-  const [parentTaskId, setParentTaskId] = useState("");
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
   const [projects, setProjects] = useState<TeamProjectOption[]>([]);
   const [clientProjects, setClientProjects] = useState<TeamClientProjectOption[]>([]);
-  const [parents, setParents] = useState<{ id: string; title: string; ticketType: string }[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsError, setOptionsError] = useState("");
 
@@ -115,7 +113,6 @@ export default function TeamTaskForm() {
       setUsers(data.users);
       setProjects(data.projects);
       setClientProjects(data.clientProjects);
-      setParents(data.parents);
 
       if (data.projects.length > 0) {
         const fromUrl = searchParams.get("proyecto_notion");
@@ -300,7 +297,6 @@ export default function TeamTaskForm() {
     setSelectedTags(["tareas"]);
     setHours("");
     setSubtasks([]);
-    setParentTaskId("");
     setEnvironment("Desarrollo");
     setScope("Frontend");
     if (clientProjects.length > 0) {
@@ -366,10 +362,7 @@ export default function TeamTaskForm() {
             required
             disabled={busy || loadingOptions || projects.length === 0}
             value={projectRelationId}
-            onChange={(e) => {
-              setProjectRelationId(e.target.value);
-              setParentTaskId("");
-            }}
+            onChange={(e) => setProjectRelationId(e.target.value)}
             className={fieldClasses}
           >
             {projects.length === 0 ? (
@@ -490,27 +483,6 @@ export default function TeamTaskForm() {
             ))}
           </div>
           <input type="hidden" name="ticketType" value={ticketType} />
-        </div>
-
-        <div>
-          <label htmlFor="parentTaskId" className={labelClasses}>
-            Épica / tarea padre <span className="font-normal text-[#9b9a97]">(opcional)</span>
-          </label>
-          <select
-            id="parentTaskId"
-            name="parentTaskId"
-            disabled={busy || loadingOptions}
-            value={parentTaskId}
-            onChange={(e) => setParentTaskId(e.target.value)}
-            className={fieldClasses}
-          >
-            <option value="">Sin padre — tarea independiente</option>
-            {parents.map((p) => (
-              <option key={p.id} value={p.id}>
-                [{p.ticketType}] {p.title}
-              </option>
-            ))}
-          </select>
         </div>
 
         <button
