@@ -5,6 +5,7 @@
   --foreground: #37352f; /* gris tinta tipo Notion */
   --border: #efefef;
   --muted: #787774;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -16,11 +17,20 @@
     Roboto, Helvetica, Arial, sans-serif;
 }
 
+html {
+  background-color: #ffffff;
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  /* En iframe de Notion (iOS), h-full colapsa y se ve el fondo negro del contenedor. */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
 }
 
 /* Para iframes de Notion: evita el scroll horizontal y mantiene el fondo limpio. */
