@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PropuestaApiResponse } from "@/app/api/propuestas/route";
 import { DocumentDropInput } from "@/components/DocumentDropInput";
+import { DEFAULT_PM_ASSIGNEE_IDS } from "@/lib/propuesta-defaults";
 import type { TeamOptionsApiResponse, TeamUserOption } from "@/lib/team-types";
 import { TEAM_PRIORITIES } from "@/lib/team-types";
 
@@ -36,6 +37,7 @@ export default function ProposalUploadForm() {
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [assignees, setAssignees] = useState<string[]>([...DEFAULT_PM_ASSIGNEE_IDS]);
   const [reviewers, setReviewers] = useState<string[]>([]);
 
   const loading = status === "loading";
@@ -58,6 +60,10 @@ export default function ProposalUploadForm() {
     };
   }, []);
 
+  function toggleAssignee(id: string) {
+    setAssignees((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]));
+  }
+
   function toggleReviewer(id: string) {
     setReviewers((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]));
   }
@@ -66,11 +72,18 @@ export default function ProposalUploadForm() {
     e.preventDefault();
     if (loading || !hasFile) return;
 
+    if (assignees.length === 0) {
+      setErrorMsg("Selecciona al menos un responsable.");
+      setStatus("error");
+      return;
+    }
+
     setStatus("loading");
     setErrorMsg("");
 
     try {
       const formData = new FormData(e.currentTarget);
+      formData.set("assignees", JSON.stringify(assignees));
       formData.set("reviewers", JSON.stringify(reviewers));
       formData.set("priority", priority);
 
@@ -95,6 +108,7 @@ export default function ProposalUploadForm() {
   function resetForm() {
     formRef.current?.reset();
     setHasFile(false);
+    setAssignees([...DEFAULT_PM_ASSIGNEE_IDS]);
     setReviewers([]);
     setPriority("Media");
     setCreatedTitle("");
@@ -160,10 +174,6 @@ export default function ProposalUploadForm() {
         onFileChange={(f) => setHasFile(Boolean(f))}
       />
 
-      <p className="text-xs text-[#9b9a97]">
-        La IA estructura objetivos, historias de usuario, actividades, horas y costos.
-      </p>
-
       <div>
         <label htmlFor="priority" className={labelClasses}>Prioridad</label>
         <select
@@ -180,9 +190,34 @@ export default function ProposalUploadForm() {
         </select>
       </div>
 
-      <div className="rounded-md border border-[#efefef] bg-[#f7f7f5] px-3 py-2 text-xs text-[#787774]">
-        Proyecto: <span className="font-medium text-[#37352f]">Propuestas</span>. Responsables asignados
-        automáticamente.
+      <div>
+        <span className={labelClasses}>Responsables</span>
+        {loadingUsers ? (
+          <p className="text-sm text-[#9b9a97]">Cargando equipo…</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {users.map((u) => {
+              const active = assignees.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => toggleAssignee(u.id)}
+                  className={
+                    "rounded-full border px-2.5 py-1 text-xs font-medium transition " +
+                    (active
+                      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
+                      : "border-[#efefef] bg-white text-[#787774] hover:border-[#d3d1cb]")
+                  }
+                >
+                  {u.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <p className="mt-1.5 text-xs text-[#9b9a97]">Toca para seleccionar uno o varios responsables.</p>
       </div>
 
       <div>

@@ -1,3 +1,5 @@
+import { defaultPmAssigneeIdsCsv } from "./propuesta-defaults";
+
 /** Configuración del flujo de Propuestas (/propuestas). */
 
 export interface PropuestaConfig {
@@ -13,8 +15,7 @@ export function getPropuestaConfig(): PropuestaConfig {
   const responsablesRaw =
     process.env.NOTION_PROPUESTA_RESPONSABLE_IDS ??
     process.env.NOTION_BAGO_ASSIGNEE_IDS ??
-    // Ángeles Correa, Cinthia Burbano
-    "334d872b-594c-81ab-8fd2-00025b930cba,335d872b-594c-8136-83a5-00021ea2cf93";
+    defaultPmAssigneeIdsCsv();
 
   return {
     projectRelationId:

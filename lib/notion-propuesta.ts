@@ -23,12 +23,13 @@ import { ServiceError } from "./types";
 export interface CreatePropuestaArgs {
   formatted: FormattedPropuesta;
   reviewerIds: string[];
+  assigneeIds?: string[];
   priority?: string;
 }
 
-/** Crea una tarea de Propuesta en Notion con responsables fijos y revisores elegidos. */
+/** Crea una tarea de Propuesta en Notion con responsables y revisores elegidos. */
 export async function createPropuestaPage(args: CreatePropuestaArgs): Promise<CreatePageResponse> {
-  const { formatted, reviewerIds, priority } = args;
+  const { formatted, reviewerIds, assigneeIds, priority } = args;
   const config = getNotionConfig();
   const propuesta = getPropuestaConfig();
   const teamProps = getTeamNotionProps();
@@ -50,8 +51,9 @@ export async function createPropuestaPage(args: CreatePropuestaArgs): Promise<Cr
     [props.status]: notionStatus(propuesta.estado),
   };
 
-  if (propuesta.responsableIds.length > 0) {
-    properties[teamProps.assignee] = notionPeople(propuesta.responsableIds);
+  const responsables = (assigneeIds?.length ? assigneeIds : propuesta.responsableIds).filter(Boolean);
+  if (responsables.length > 0) {
+    properties[teamProps.assignee] = notionPeople(responsables);
   }
 
   const reviewers = reviewerIds.filter(Boolean);

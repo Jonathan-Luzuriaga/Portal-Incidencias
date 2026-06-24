@@ -52,6 +52,7 @@ export async function POST(request: Request): Promise<NextResponse<PropuestaApiR
   }
 
   const reviewerIds = parseReviewers(String(form.get("reviewers") ?? ""));
+  const assigneeIds = parseReviewers(String(form.get("assignees") ?? ""));
   const priorityRaw = String(form.get("priority") ?? "Media").trim();
   const allowedPriorities = new Set(["Alta", "Media", "Baja"]);
   const priority = allowedPriorities.has(priorityRaw) ? priorityRaw : "Media";
@@ -63,7 +64,7 @@ export async function POST(request: Request): Promise<NextResponse<PropuestaApiR
     }
 
     const formatted = await formatPropuestaFromText(text);
-    const page = await createPropuestaPage({ formatted, reviewerIds, priority });
+    const page = await createPropuestaPage({ formatted, reviewerIds, assigneeIds, priority });
 
     return NextResponse.json<PropuestaApiResponse>(
       {
