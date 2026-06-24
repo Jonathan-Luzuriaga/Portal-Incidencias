@@ -189,16 +189,22 @@ export function markdownToNotionBlocks(markdown: string): BlockObjectRequest[] {
       continue;
     }
 
-    // Cita
-    const quote = trimmed.match(/^>\s?(.*)$/);
-    if (quote) {
-      blocks.push(quoteBlock(quote[1]));
-      i++;
+    // Cita (multilínea)
+    if (trimmed.startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < lines.length) {
+        const q = lines[i].trim();
+        if (!q.startsWith(">")) break;
+        const content = q.replace(/^>\s?/, "");
+        if (content) quoteLines.push(content);
+        i++;
+      }
+      blocks.push(quoteBlock(quoteLines.join("\n")));
       continue;
     }
 
-    // Lista con viñetas
-    const bullet = trimmed.match(/^[-*•]\s+(.+)$/);
+    // Lista con viñetas (incluye indentadas)
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
     if (bullet) {
       blocks.push(listItemBlock(bullet[1], false));
       i++;
@@ -218,13 +224,14 @@ export function markdownToNotionBlocks(markdown: string): BlockObjectRequest[] {
     i++;
     while (i < lines.length) {
       const next = lines[i].trim();
+      const nextLine = lines[i];
       if (
         !next ||
         next.startsWith("#") ||
         next.startsWith("|") ||
         next.startsWith(">") ||
         /^(-{3,}|\*{3,}|_{3,})$/.test(next) ||
-        /^[-*•]\s/.test(next) ||
+        /^\s*[-*•]\s/.test(nextLine) ||
         /^\d+[.)]\s/.test(next)
       ) {
         break;

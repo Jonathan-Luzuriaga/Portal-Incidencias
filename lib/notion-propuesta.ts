@@ -6,7 +6,6 @@ import { markdownToNotionBlocks } from "./notion-blocks";
 import {
   notionDate,
   notionMultiSelect,
-  notionNumber,
   notionPeople,
   notionRelation,
   notionRichText,
@@ -59,10 +58,6 @@ export async function createPropuestaPage(args: CreatePropuestaArgs): Promise<Cr
   const reviewers = reviewerIds.filter(Boolean);
   if (reviewers.length > 0) {
     properties["Revisores"] = notionPeople(reviewers);
-  }
-
-  if (formatted.totalHours != null && formatted.totalHours > 0) {
-    properties["Horas por tarea"] = notionNumber(formatted.totalHours);
   }
 
   for (const dateProp of config.datePropertyNames) {

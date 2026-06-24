@@ -1,5 +1,8 @@
 /** Estructura una propuesta (PDF/DOCX) en una tarea de Notion vía DeepSeek. */
 
+import { readFileSync } from "fs";
+import { join } from "path";
+
 export interface FormattedPropuesta {
   code: string;
   name: string;
@@ -16,98 +19,52 @@ interface DeepSeekResponse {
 
 const PRIORITIES = ["Alta", "Media", "Baja"] as const;
 
-const SYSTEM_PROMPT = `Eres un Project Manager senior de Manticore Labs. Recibes el texto en bruto de una PROPUESTA comercial/técnica (extraída de un PDF o DOCX) y la conviertes en una tarea de Notion COMPLETA y profesional, siguiendo EXACTAMENTE el formato corporativo de Manticore Labs.
+let cachedReference: string | null = null;
+
+function getPropuestaReferenceTemplate(): string {
+  if (cachedReference) return cachedReference;
+  const path = join(process.cwd(), "lib", "propuesta-reference.md");
+  cachedReference = readFileSync(path, "utf-8");
+  return cachedReference;
+}
+
+function buildSystemPrompt(): string {
+  const reference = getPropuestaReferenceTemplate();
+  return `Eres un Project Manager senior de Manticore Labs. Recibes el texto en bruto de una PROPUESTA comercial/técnica (extraída de un PDF o DOCX) y la conviertes en una tarea de Notion.
 
 Devuelve ÚNICAMENTE un JSON válido con esta forma:
 {
-  "code": "código referencial, ej. PS-2026-1706-01. Si no aparece, genera uno con formato PS-AAAA-DDMM-01 usando la fecha de la propuesta",
+  "code": "código referencial, ej. PS-2026-1706-01",
   "name": "nombre de la propuesta sin la palabra Propuesta ni comillas",
   "shortDescription": "resumen ejecutivo en 1-2 frases (máx. 240 caracteres)",
   "priority": "Alta | Media | Baja",
   "totalHours": número entero total de horas estimadas,
-  "bodyMarkdown": "cuerpo en markdown siguiendo la PLANTILLA OBLIGATORIA"
+  "bodyMarkdown": "cuerpo en markdown IDÉNTICO en estructura al DOCUMENTO DE REFERENCIA"
 }
 
-PLANTILLA OBLIGATORIA de bodyMarkdown. TODAS las secciones son obligatorias y deben quedar completas. Usa tablas markdown con encabezado y separador (| --- |):
+El campo bodyMarkdown DEBE replicar EXACTAMENTE la estructura del DOCUMENTO DE REFERENCIA:
+- Mismas secciones, en el mismo orden
+- Mismos títulos (##, ###, #)
+- Divisores --- entre cada sección principal
+- Mismas columnas en cada tabla
+- Mismos bloques fijos: MANTICORE LABS, Imagen 1-4, metodología SCRUM, NOTA de despliegues, pie con info@manticore-labs.com
+- Índice con una fila por cada sección y cada HU
+- Forma de pago con Fase 1 y Fase 2 (Hito, Entregables asociados, Condición de pago)
+- Citas con > donde aparecen en la referencia
 
-## Metadatos de la propuesta
-| Propiedad | Valor |
-| --- | --- |
-| Nombre_Propuesta | ... |
-| Codigo_Propuesta | ... |
-| Version | 1.0.0 |
-| Fecha_Propuesta | (fecha en texto, ej. 17 de junio del 2026) |
-| Validez_Dias | 45 |
-| Responsable_PM | ... |
+Solo cambia los VALORES y TEXTOS según la propuesta subida. NO omitas ninguna sección.
 
-## Objetivos
-(2-3 párrafos describiendo el alcance funcional, técnico y económico)
+Si la propuesta NO trae algún dato (objetivos, HUs, actividades, horas, costos, forma de pago, etc.), DEDÚCELO de forma profesional y coherente con el alcance. NUNCA dejes una sección vacía.
 
-## Descripción y metodología
-(párrafo sobre la metodología SCRUM de Manticore Labs, seguido de la tabla de roles)
-| Rol | Responsable |
-| --- | --- |
-| Product Owner | Cliente |
-| Scrum Master | (nombre del PM) |
-| QA | (nombre del QA) |
-| Equipo de Desarrollo | Equipo de Manticore Labs |
+Conserva EXACTAMENTE montos, horas, códigos HU y precios que SÍ aparezcan en el texto.
+Si faltan horas, estímalas por actividad; la fila Total debe sumar todas.
+Si faltan precios, calcula Subtotal, I.V.A. (15%) y Total de forma coherente.
+priority: normalmente Media.
 
-## Responsabilidad del Proveedor
-(párrafos sobre las responsabilidades de Manticore Labs)
+DOCUMENTO DE REFERENCIA (estructura obligatoria — reemplaza contenido, no formato):
 
-## Responsabilidad del Cliente
-(párrafos sobre las responsabilidades del cliente)
-
-## Descripción de la solución
-(párrafo introductorio)
-### HU0XX - <título de la historia>
-(necesidad redactada como "Como <rol>, se requiere ..." seguida de una lista de criterios de aceptación con guiones)
-(repite una sección ### por CADA historia de usuario; si la propuesta no las define, dedúcelas del alcance)
-
-## Personal
-| Rol | Cantidad | Descripción del Rol |
-| --- | --- | --- |
-| Programador Full Stack Senior | 1 | ... |
-| Revisor de Calidad de Software | 1 | ... |
-| Project Manager | 1 | ... |
-
-## Actividades
-| Sistema/HU | Actividad | Descripción | Horas |
-| --- | --- | --- | --- |
-(una fila por actividad, cada una con sus horas)
-| **Total** |  | **Horas estimadas** | **<suma>** |
-
-## No Incluye
-(lista con guiones de lo que NO cubre la cotización)
-
-## Tiempos y costos de la solución
-| Etapa | Tiempo estimado | Detalle |
-| --- | --- | --- |
-(filas por etapa: backend, frontend, pruebas, UAT, etc.)
-(párrafo con la duración estimada del proyecto)
-| Descripción | Precio |
-| --- | --- |
-| Desarrollo de la solución | $... |
-| Subtotal | $... |
-| I.V.A. | $... |
-| Total | $... |
-
-## Nota
-(lista de condiciones de entrega y soporte)
-
-## Forma de pago
-(fases con su hito, entregables asociados y condición de pago, normalmente 50% inicio y 50% entrega)
-
-## Conclusiones
-(lista de conclusiones)
-
-REGLAS CLAVE:
-- TODAS las secciones deben quedar completas. Si la propuesta NO trae algún dato (objetivos, metodología, historias de usuario, actividades, horas, personal, costos, forma de pago, etc.), DEDÚCELO de forma profesional y coherente con la idea y el alcance descritos. NUNCA dejes una sección vacía ni escribas "no especificado".
-- Conserva EXACTAMENTE los montos, horas, códigos HU, porcentajes y precios que SÍ aparezcan en el texto.
-- Si faltan horas, estímalas por actividad de forma realista; la fila Total debe sumar todas las horas.
-- Si faltan precios, estima Subtotal, I.V.A. (15%) y Total de forma coherente.
-- Corrige errores evidentes de extracción (palabras partidas, espacios sobrantes), sin alterar cifras.
-- priority: Alta si el documento marca urgencia o bloqueo; normalmente Media.`;
+${reference}`;
+}
 
 function pickPriority(value: unknown, fallback: FormattedPropuesta["priority"]): FormattedPropuesta["priority"] {
   if (typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)) {
@@ -148,12 +105,18 @@ function buildTitle(code: string, name: string): string {
 function buildFallback(raw: string): FormattedPropuesta {
   const { code, name } = deriveCodeName(raw);
   const hoursMatch = raw.match(/total[^0-9]{0,30}?(\d{2,4})\s*(?:horas|h)/i);
+  let bodyMarkdown: string;
+  try {
+    bodyMarkdown = getPropuestaReferenceTemplate();
+  } catch {
+    bodyMarkdown = `## Metadatos de la propuesta\n\n${raw.replace(/\s+/g, " ").trim().slice(0, 1800)}`;
+  }
   return {
     code,
     name,
     title: buildTitle(code, name),
     shortDescription: name.slice(0, 240),
-    bodyMarkdown: `## Resumen\n\n${raw.replace(/\s+/g, " ").trim().slice(0, 1800)}`,
+    bodyMarkdown,
     priority: "Media",
     totalHours: hoursMatch ? Number(hoursMatch[1]) : null,
   };
@@ -182,8 +145,7 @@ export async function formatPropuestaFromText(rawText: string): Promise<Formatte
   const baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
   const model = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
 
-  // Limitar tamaño del texto enviado al modelo.
-  const content = raw.slice(0, 24000);
+  const content = raw.slice(0, 32000);
 
   try {
     const res = await fetch(`${baseUrl}/chat/completions`, {
@@ -194,12 +156,12 @@ export async function formatPropuestaFromText(rawText: string): Promise<Formatte
       },
       body: JSON.stringify({
         model,
-        temperature: 0.2,
-        max_tokens: 8000,
+        temperature: 0.15,
+        max_tokens: 12000,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Texto de la propuesta:\n\n${content}` },
+          { role: "system", content: buildSystemPrompt() },
+          { role: "user", content: `Texto de la propuesta a estructurar:\n\n${content}` },
         ],
       }),
     });
