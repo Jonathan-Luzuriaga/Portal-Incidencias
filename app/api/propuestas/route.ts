@@ -52,6 +52,9 @@ export async function POST(request: Request): Promise<NextResponse<PropuestaApiR
   }
 
   const reviewerIds = parseReviewers(String(form.get("reviewers") ?? ""));
+  const priorityRaw = String(form.get("priority") ?? "Media").trim();
+  const allowedPriorities = new Set(["Alta", "Media", "Baja"]);
+  const priority = allowedPriorities.has(priorityRaw) ? priorityRaw : "Media";
 
   try {
     const text = await extractDocumentText(docFile);
@@ -60,7 +63,7 @@ export async function POST(request: Request): Promise<NextResponse<PropuestaApiR
     }
 
     const formatted = await formatPropuestaFromText(text);
-    const page = await createPropuestaPage({ formatted, reviewerIds });
+    const page = await createPropuestaPage({ formatted, reviewerIds, priority });
 
     return NextResponse.json<PropuestaApiResponse>(
       {

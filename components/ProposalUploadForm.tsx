@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PropuestaApiResponse } from "@/app/api/propuestas/route";
+import { DocumentDropInput } from "@/components/DocumentDropInput";
 import type { TeamOptionsApiResponse, TeamUserOption } from "@/lib/team-types";
+import { TEAM_PRIORITIES } from "@/lib/team-types";
 
 type Status = "idle" | "loading" | "success" | "error";
+
+const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
   "shadow-[0_1px_2px_rgba(15,15,15,0.04)] outline-none transition " +
-  "placeholder:text-[#9b9a97] focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
+  "focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
-
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
 function Spinner() {
   return (
@@ -27,9 +29,10 @@ export default function ProposalUploadForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [docName, setDocName] = useState("");
+  const [hasFile, setHasFile] = useState(false);
   const [createdTitle, setCreatedTitle] = useState("");
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [priority, setPriority] = useState("Media");
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -61,7 +64,7 @@ export default function ProposalUploadForm() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !hasFile) return;
 
     setStatus("loading");
     setErrorMsg("");
@@ -69,6 +72,7 @@ export default function ProposalUploadForm() {
     try {
       const formData = new FormData(e.currentTarget);
       formData.set("reviewers", JSON.stringify(reviewers));
+      formData.set("priority", priority);
 
       const res = await fetch("/api/propuestas", { method: "POST", body: formData });
       const data = (await res.json()) as PropuestaApiResponse;
@@ -90,8 +94,9 @@ export default function ProposalUploadForm() {
 
   function resetForm() {
     formRef.current?.reset();
-    setDocName("");
+    setHasFile(false);
     setReviewers([]);
+    setPriority("Media");
     setCreatedTitle("");
     setCreatedUrl(null);
     setStatus("idle");
@@ -112,9 +117,7 @@ export default function ProposalUploadForm() {
             </svg>
           </div>
           <h2 className="text-base font-semibold text-[#37352f]">Propuesta creada</h2>
-          <p className="mt-1 text-sm text-[#787774]">
-            Responsables: Ángeles y Cinthia. Estado: Por Revisar.
-          </p>
+          <p className="mt-1 text-sm text-[#787774]">La tarea quedó en Notion con estado Por Revisar.</p>
         </div>
 
         <div className="mt-4 rounded-md bg-[#f7f7f5] px-3 py-2 text-sm">
@@ -150,28 +153,36 @@ export default function ProposalUploadForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
     >
+      <DocumentDropInput
+        disabled={loading}
+        label="Propuesta (PDF o DOCX)"
+        hint="Arrastra el PDF o DOCX aquí, o haz clic para elegirlo."
+        onFileChange={(f) => setHasFile(Boolean(f))}
+      />
+
+      <p className="text-xs text-[#9b9a97]">
+        La IA estructura objetivos, historias de usuario, actividades, horas y costos.
+      </p>
+
       <div>
-        <label htmlFor="document" className={labelClasses}>Propuesta (PDF o DOCX)</label>
-        <input
-          id="document"
-          name="document"
-          type="file"
-          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          required
+        <label htmlFor="priority" className={labelClasses}>Prioridad</label>
+        <select
+          id="priority"
+          name="priority"
           disabled={loading}
-          onChange={(e) => setDocName(e.target.files?.[0]?.name ?? "")}
-          className="block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
-        />
-        {docName && <p className="mt-1 text-xs text-[#787774]">• {docName}</p>}
-        <p className="mt-2 text-xs text-[#9b9a97]">
-          La IA estructura objetivos, historias de usuario, actividades, horas y costos.
-        </p>
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          className={fieldClasses}
+        >
+          {TEAM_PRIORITIES.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
       </div>
 
       <div className="rounded-md border border-[#efefef] bg-[#f7f7f5] px-3 py-2 text-xs text-[#787774]">
-        Responsables fijos: <span className="font-medium text-[#37352f]">Ángeles Correa</span> y{" "}
-        <span className="font-medium text-[#37352f]">Cinthia Burbano</span>. Proyecto:{" "}
-        <span className="font-medium text-[#37352f]">Propuestas</span>.
+        Proyecto: <span className="font-medium text-[#37352f]">Propuestas</span>. Responsables asignados
+        automáticamente.
       </div>
 
       <div>
@@ -212,7 +223,7 @@ export default function ProposalUploadForm() {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || !hasFile}
         className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
       >
         {loading && <Spinner />}

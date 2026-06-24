@@ -12,6 +12,7 @@ export interface PropuestaConfig {
 export function getPropuestaConfig(): PropuestaConfig {
   const responsablesRaw =
     process.env.NOTION_PROPUESTA_RESPONSABLE_IDS ??
+    process.env.NOTION_BAGO_ASSIGNEE_IDS ??
     // Ángeles Correa, Cinthia Burbano
     "334d872b-594c-81ab-8fd2-00025b930cba,335d872b-594c-8136-83a5-00021ea2cf93";
 
@@ -33,4 +34,9 @@ export function getPropuestaConfig(): PropuestaConfig {
       .filter(Boolean),
     prioridadDefault: process.env.NOTION_PROPUESTA_PRIORITY ?? "Media",
   };
+}
+
+/** Responsables PM por defecto (propuestas e incidencias Bago). */
+export function getPmAssigneeIds(): string[] {
+  return getPropuestaConfig().responsableIds;
 }

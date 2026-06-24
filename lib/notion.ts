@@ -6,6 +6,7 @@ import { markdownToNotionBlocks, evidenceImageBlocks } from "./notion-blocks";
 import {
   notionDate,
   notionMultiSelect,
+  notionPeople,
   notionRelation,
   notionRichText,
   notionSelect,
@@ -14,6 +15,8 @@ import {
 } from "./notion-properties";
 import { resolveCurrentSprintId } from "./notion-sprint";
 import { getNotionTags } from "./project-profiles";
+import { getPmAssigneeIds } from "./propuesta-config";
+import { getTeamNotionProps } from "./team-notion-config";
 import { FormattedIncident, ServiceError } from "./types";
 
 interface CreateIncidentArgs {
@@ -58,6 +61,11 @@ export async function createIncidentPage(args: CreateIncidentArgs): Promise<Crea
   const sprintId = await resolveCurrentSprintId();
   if (sprintId) {
     properties[props.sprint] = notionRelation([sprintId]);
+  }
+
+  const assigneeIds = getPmAssigneeIds();
+  if (assigneeIds.length > 0) {
+    properties[getTeamNotionProps().assignee] = notionPeople(assigneeIds);
   }
 
   try {
