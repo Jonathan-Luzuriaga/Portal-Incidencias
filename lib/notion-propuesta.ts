@@ -74,12 +74,24 @@ export async function createPropuestaPage(args: CreatePropuestaArgs): Promise<Cr
     properties[props.sprint] = notionRelation([sprintId]);
   }
 
+  const BATCH = 100;
   try {
-    return await notion.pages.create({
+    const page = await notion.pages.create({
       parent: { database_id: config.databaseId },
       properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
-      children: bodyBlocks.length > 0 ? bodyBlocks : undefined,
+      children: bodyBlocks.length > 0 ? bodyBlocks.slice(0, BATCH) : undefined,
     });
+
+    let rest = bodyBlocks.slice(BATCH);
+    while (rest.length > 0) {
+      await notion.blocks.children.append({
+        block_id: page.id,
+        children: rest.slice(0, BATCH) as Parameters<typeof notion.blocks.children.append>[0]["children"],
+      });
+      rest = rest.slice(BATCH);
+    }
+
+    return page;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     throw new ServiceError(
