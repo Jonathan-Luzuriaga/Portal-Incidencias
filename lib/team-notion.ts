@@ -67,8 +67,13 @@ export async function createTeamTaskPage(
     [props.tags]: notionMultiSelect(tags),
   };
 
-  if (form.assigneeId) {
-    properties[teamProps.assignee] = notionPeople([form.assigneeId]);
+  if (form.assigneeIds.length > 0) {
+    properties[teamProps.assignee] = notionPeople(form.assigneeIds);
+  }
+
+  const reviewers = form.reviewerIds.filter(Boolean);
+  if (reviewers.length > 0) {
+    properties["Revisores"] = notionPeople(reviewers);
   }
 
   if (form.parentTaskId) {
@@ -79,8 +84,9 @@ export async function createTeamTaskPage(
     properties["PR link"] = notionUrl(form.prLink);
   }
 
-  if (form.hours != null && form.hours > 0) {
-    properties["Horas por tarea"] = notionNumber(form.hours);
+  const hoursProp = process.env.NOTION_PROP_HOURS?.trim();
+  if (hoursProp && form.hours != null && form.hours > 0) {
+    properties[hoursProp] = notionNumber(form.hours);
   }
 
   for (const dateProp of config.datePropertyNames) {

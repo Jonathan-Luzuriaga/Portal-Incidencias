@@ -3,7 +3,6 @@ import { processAndCreateTeamTask } from "@/lib/team-pipeline";
 import {
   inferClientFromClientProject,
   resolveTeamClientProject,
-  resolveTeamProject,
   scopeToCategories,
   TEAM_CATEGORY_OPTIONS,
 } from "@/lib/team-profiles";
@@ -14,6 +13,7 @@ import {
   TEAM_TICKET_TYPES,
   TeamTaskApiResponse,
   TeamTaskFormData,
+  TeamAdditionalTaskInput,
   TeamEnvironment,
   TeamPriority,
   TeamScope,
@@ -37,6 +37,20 @@ function parseTags(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseIds(raw: string): string[] {
+  if (!raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map((s) => String(s).trim()).filter(Boolean);
+  } catch {
+    // CSV fallback
+  }
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function parseSubtasks(raw: string): TeamSubtaskInput[] {
   if (!raw.trim()) return [];
   try {
@@ -47,11 +61,38 @@ function parseSubtasks(raw: string): TeamSubtaskInput[] {
       .map((s) => ({
         title: s.title.trim(),
         shortDescription: String(s.shortDescription ?? s.title).trim(),
+        bodyMarkdown: s.bodyMarkdown ? String(s.bodyMarkdown) : undefined,
         enabled: s.enabled !== false,
       }));
   } catch {
     return [];
   }
+}
+
+function parseAdditionalTasks(raw: string): TeamAdditionalTaskInput[] {
+  if (!raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as TeamAdditionalTaskInput[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((t) => t && (String(t.rawInput ?? "").trim() || String(t.title ?? "").trim()))
+      .map((t) => ({
+        rawInput: String(t.rawInput ?? "").trim(),
+        title: String(t.title ?? "").trim(),
+        shortDescription: String(t.shortDescription ?? "").trim(),
+        bodyMarkdown: String(t.bodyMarkdown ?? "").trim(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function parseHours(raw: string): number | null {
+  const cleaned = raw.trim().replace(",", ".");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (Number.isNaN(n) || n < 0) return NaN;
+  return n;
 }
 
 function parseForm(
@@ -65,7 +106,8 @@ function parseForm(
   const ticketType = String(form.get("ticketType") ?? "").trim() as TeamTicketType;
   const priority = String(form.get("priority") ?? "").trim() as TeamPriority;
   const projectRelationId = String(form.get("projectRelationId") ?? "").trim();
-  const assigneeId = String(form.get("assigneeId") ?? "").trim();
+  const assigneeIds = parseIds(String(form.get("assigneeIds") ?? ""));
+  const reviewerIds = parseIds(String(form.get("reviewerIds") ?? ""));
   const parentTaskId = String(form.get("parentTaskId") ?? "").trim();
   const clientProject = resolveTeamClientProject(String(form.get("clientProject") ?? ""));
   const environmentRaw = String(form.get("environment") ?? "Desarrollo").trim() as TeamEnvironment;
@@ -73,9 +115,9 @@ function parseForm(
   const category = String(form.get("category") ?? "").trim();
   const tags = parseTags(String(form.get("tags") ?? ""));
   const subtasks = parseSubtasks(String(form.get("subtasksJson") ?? ""));
+  const additionalTasks = parseAdditionalTasks(String(form.get("additionalTasksJson") ?? ""));
   const prLink = String(form.get("prLink") ?? "").trim();
-  const hoursRaw = String(form.get("hours") ?? "").trim();
-  const hours = hoursRaw ? Number(hoursRaw) : null;
+  const hours = parseHours(String(form.get("hours") ?? ""));
 
   const environment = TEAM_ENVIRONMENTS.includes(environmentRaw) ? environmentRaw : "Desarrollo";
   const scope = TEAM_SCOPES.includes(scopeRaw) ? scopeRaw : "Frontend";
@@ -85,7 +127,7 @@ function parseForm(
   if (!rawInput && !title) {
     return "Describe la idea o espera el preview de la IA.";
   }
-  if (!assigneeId) return "Selecciona a quién se asigna la tarea.";
+  if (assigneeIds.length === 0) return "Selecciona al menos un responsable.";
   if (!projectRelationId) return "Selecciona un proyecto.";
   if (!clientProject) return "Selecciona el Proyecto Cliente.";
   if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo válido.";
@@ -102,7 +144,7 @@ function parseForm(
   if (prLink && !/^https?:\/\//i.test(prLink)) {
     return "El enlace del PR debe ser una URL válida (http/https).";
   }
-  if (hours != null && (Number.isNaN(hours) || hours < 0)) {
+  if (hours !== null && Number.isNaN(hours)) {
     return "Las horas deben ser un número positivo.";
   }
 
@@ -115,8 +157,10 @@ function parseForm(
     client: inferClientFromClientProject(clientProject),
     clientProject,
     projectRelationId,
-    assigneeId,
+    assigneeIds,
+    reviewerIds,
     parentTaskId,
+    additionalTasks,
     environment,
     scope,
     categories,
@@ -124,7 +168,7 @@ function parseForm(
     tags,
     subtasks,
     prLink,
-    hours,
+    hours: hours !== null && !Number.isNaN(hours) ? hours : null,
   };
 }
 

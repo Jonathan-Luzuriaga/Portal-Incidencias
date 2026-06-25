@@ -25,22 +25,44 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura:
   "category": "una categoría permitida",
   "tags": ["etiqueta1", "etiqueta2"],
   "hours": null o número,
-  "subtasks": [{ "title": "...", "shortDescription": "..." }]
+  "subtasks": [{ "title": "...", "shortDescription": "...", "bodyMarkdown": "..." }]
 }
 
 NO incluyas ticketType, client ni clientProject en el JSON: el PM ya los eligió.
 
-bodyMarkdown según tipo indicado por el PM:
-- Bug: ## 📍 Contexto, ## 🔍 Detalle técnico, ## 👣 Pasos para reproducir, ## ✅ Criterio de cierre
-- Tarea/Épica: ## 📍 Contexto, ## 🎯 Objetivo, ## 📐 Alcance, ## ✅ Criterios de aceptación
+bodyMarkdown según el tipo indicado por el PM:
 
-subtasks:
-- Si el tipo es Épica o la idea tiene pasos claramente separables, sugiere 2-6 subtareas concretas.
-- Si es Bug o idea simple, devuelve subtasks: [].
+**Bug (QA — mantener este formato exacto):**
+## Contexto
+## Detalle técnico
+## Pasos para reproducir
+## Criterio de cierre
+subtasks: []
 
-Reglas:
-- Corrige ortografía; no inventes requisitos.
-- tags: incluye "tareas"; añade "bugs" solo si el tipo es Bug.
+**Tarea (simple — estilo PM conciso, sin sobrecargar):**
+Ajusta el nivel de detalle al contexto:
+- Idea breve (1-2 líneas): Contexto + Objetivo + Criterio de cierre (3 secciones cortas).
+- Idea media: añade Alcance breve y 2-4 criterios de aceptación.
+- Idea compleja: Contexto, Objetivo, Alcance, Criterios de aceptación, Notas técnicas (solo si aplica).
+Usa ## para secciones. Sin emojis. Texto directo y completo pero no redundante.
+subtasks: [] SIEMPRE (las tareas no llevan subtareas).
+
+**Épica (formato completo):**
+## Contexto
+## Objetivo
+## Alcance
+## Criterios de aceptación
+## Entregables
+subtasks: 2-6 subtareas recomendadas. Cada subtarea debe incluir bodyMarkdown COMPLETO con:
+## Contexto
+## Objetivo
+## Alcance
+## Criterios de aceptación
+(redactado según esa parte de la épica)
+
+Reglas generales:
+- Corrige ortografía; no inventes requisitos fuera del alcance descrito.
+- tags: incluye "tareas"; añade "bugs" solo si el tipo es Bug; añade "qa" si el ambiente es QA.
 - priority: Alta solo si es crítico o bloqueante.`;
 
 interface DeepSeekResponse {
@@ -69,20 +91,38 @@ function firstLine(text: string): string {
   return line ?? "Nueva tarea";
 }
 
-function sanitizeSubtasks(raw: unknown): FormattedSubtask[] {
-  if (!Array.isArray(raw)) return [];
+function sanitizeSubtasks(raw: unknown, ticketType: TeamTicketType): FormattedSubtask[] {
+  if (ticketType !== "Épica" || !Array.isArray(raw)) return [];
   const result: FormattedSubtask[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const title = String((item as FormattedSubtask).title ?? "").trim();
     if (!title) continue;
+    const shortDescription = String((item as FormattedSubtask).shortDescription ?? title).slice(0, 200);
+    const bodyMarkdown = String((item as FormattedSubtask).bodyMarkdown ?? "").trim();
     result.push({
       title: title.slice(0, 120),
-      shortDescription: String((item as FormattedSubtask).shortDescription ?? title).slice(0, 200),
+      shortDescription,
+      ...(bodyMarkdown ? { bodyMarkdown } : {}),
     });
     if (result.length >= 8) break;
   }
   return result;
+}
+
+function buildFallbackBody(raw: string, ticketType: TeamTicketType): string {
+  const trimmed = raw.trim();
+  if (ticketType === "Bug") {
+    return `## Contexto\n${trimmed}\n\n## Detalle técnico\n(Por completar)\n\n## Pasos para reproducir\n1. \n\n## Criterio de cierre\nResuelto si: el comportamiento coincide con lo esperado.`;
+  }
+  if (ticketType === "Épica") {
+    return `## Contexto\n${trimmed}\n\n## Objetivo\n(Por completar)\n\n## Alcance\n(Por completar)\n\n## Criterios de aceptación\n- \n\n## Entregables\n- `;
+  }
+  const isBrief = trimmed.length < 120 && !trimmed.includes("\n");
+  if (isBrief) {
+    return `## Contexto\n${trimmed}\n\n## Objetivo\n(Por completar)\n\n## Criterio de cierre\n- `;
+  }
+  return `## Contexto\n${trimmed}\n\n## Objetivo\n(Por completar)\n\n## Alcance\n(Por completar)\n\n## Criterios de aceptación\n- `;
 }
 
 function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
@@ -102,20 +142,24 @@ function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
           ? "BUG"
           : "Workflows";
 
+  const tags = isBug ? ["tareas", "bugs"] : ["tareas"];
+  if (hints.environment === "QA") tags.push("qa");
+
   return {
     title,
     shortDescription: raw.replace(/\s+/g, " ").trim().slice(0, 200),
-    bodyMarkdown: isBug
-      ? `## 📍 Contexto\n${raw}\n\n## 🔍 Detalle técnico\n(Por completar)\n\n## 👣 Pasos para reproducir\n1. \n\n## ✅ Criterio de cierre\nResuelto si: el comportamiento coincide con lo esperado.`
-      : `## 📍 Contexto\n${raw}\n\n## 🎯 Objetivo\n(Por completar)\n\n## 📐 Alcance\n(Por completar)\n\n## ✅ Criterios de aceptación\n- `,
+    bodyMarkdown: buildFallbackBody(raw, ticketType),
     ticketType,
     priority: "Media",
     category: isBug ? "BUG" : scopeCategory,
-    tags: isBug ? ["tareas", "bugs"] : ["tareas"],
+    tags,
     client: meta.client,
     clientProject: meta.clientProject,
     hours: null,
-    subtasks: ticketType === "Épica" ? [{ title: "Definir alcance", shortDescription: "Detallar entregables de la épica" }] : [],
+    subtasks:
+      ticketType === "Épica"
+        ? [{ title: "Definir alcance", shortDescription: "Detallar entregables de la épica" }]
+        : [],
   };
 }
 
@@ -126,7 +170,7 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
   return fallback;
 }
 
-function sanitizeTags(tags: unknown, ticketType: TeamTicketType): string[] {
+function sanitizeTags(tags: unknown, ticketType: TeamTicketType, environment?: TeamEnvironment): string[] {
   const allowed = new Set<string>(TEAM_TAG_SUGGESTIONS);
   const result = new Set<string>(["tareas"]);
 
@@ -139,6 +183,7 @@ function sanitizeTags(tags: unknown, ticketType: TeamTicketType): string[] {
   }
 
   if (ticketType === "Bug") result.add("bugs");
+  if (environment === "QA") result.add("qa");
 
   return [...result];
 }
@@ -166,6 +211,8 @@ function sanitizeFormatted(
       }
     : { clientProject: fallback.clientProject, client: fallback.client };
 
+  const subtasks = sanitizeSubtasks(parsed.subtasks, ticketType);
+
   return {
     title: String(parsed.title ?? fallback.title).slice(0, 120),
     shortDescription: String(parsed.shortDescription ?? fallback.shortDescription).slice(0, 200),
@@ -173,13 +220,16 @@ function sanitizeFormatted(
     ticketType,
     priority: pickEnum(parsed.priority as TeamPriority, TEAM_PRIORITIES, fallback.priority),
     category: pickEnum(parsed.category as string, TEAM_CATEGORY_OPTIONS, fallback.category),
-    tags: sanitizeTags(parsed.tags, ticketType),
+    tags: sanitizeTags(parsed.tags, ticketType, hints.environment),
     client: meta.client,
     clientProject: meta.clientProject,
     hours: typeof parsed.hours === "number" && parsed.hours > 0 ? parsed.hours : null,
-    subtasks: sanitizeSubtasks(parsed.subtasks).length > 0
-      ? sanitizeSubtasks(parsed.subtasks)
-      : fallback.subtasks,
+    subtasks:
+      ticketType === "Épica"
+        ? subtasks.length > 0
+          ? subtasks
+          : fallback.subtasks
+        : [],
   };
 }
 
@@ -213,7 +263,7 @@ export async function formatTeamTaskFromRaw(
   const userContent = [
     "Valores permitidos:",
     allowedValuesPrompt(),
-    hints.ticketType ? `Tipo elegido por PM (usar para plantilla bodyMarkdown): ${hints.ticketType}` : "",
+    hints.ticketType ? `Tipo elegido por PM: ${hints.ticketType}` : "",
     hints.projectLabel ? `Proyecto: ${hints.projectLabel}` : "",
     hints.clientProject ? `Proyecto Cliente: ${hints.clientProject}` : "",
     hints.environment ? `Ambiente elegido por PM: ${hints.environment}` : "",

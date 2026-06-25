@@ -14,6 +14,7 @@ import type {
   TeamClientProjectOption,
   TeamEnvironment,
   TeamOptionsApiResponse,
+  TeamParentOption,
   TeamProjectOption,
   TeamScope,
   TeamStructureApiResponse,
@@ -25,6 +26,11 @@ import type {
 import { TEAM_ENVIRONMENTS, TEAM_PRIORITIES, TEAM_SCOPES } from "@/lib/team-types";
 
 type Status = "idle" | "loading" | "structuring" | "success" | "error";
+
+interface AdditionalTaskDraft {
+  id: string;
+  rawInput: string;
+}
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
@@ -55,11 +61,26 @@ function Spinner() {
 
 function typeButtonClass(active: boolean) {
   return (
-    "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition " +
+    "flex-1 rounded-md border px-3 py-2.5 text-sm font-medium transition " +
     (active
-      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
+      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1] shadow-sm"
       : "border-[#efefef] bg-[#f7f7f5] text-[#787774] hover:border-[#d3d1cb]")
   );
+}
+
+function chipClass(active: boolean) {
+  return (
+    "rounded-full border px-2.5 py-1 text-xs font-medium transition " +
+    (active
+      ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
+      : "border-[#efefef] bg-white text-[#787774] hover:border-[#d3d1cb]")
+  );
+}
+
+let nextId = 0;
+function uid() {
+  nextId += 1;
+  return `task-${nextId}`;
 }
 
 export default function TeamTaskForm() {
@@ -79,12 +100,15 @@ export default function TeamTaskForm() {
   const [clientProject, setClientProject] = useState(DEFAULT_TEAM_CLIENT_PROJECT);
   const [environment, setEnvironment] = useState<TeamEnvironment>("Desarrollo");
   const [scope, setScope] = useState<TeamScope>("Frontend");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [reviewerIds, setReviewerIds] = useState<string[]>([]);
+  const [parentTaskId, setParentTaskId] = useState("");
   const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
   const [projects, setProjects] = useState<TeamProjectOption[]>([]);
   const [clientProjects, setClientProjects] = useState<TeamClientProjectOption[]>([]);
+  const [epicParents, setEpicParents] = useState<TeamParentOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsError, setOptionsError] = useState("");
 
@@ -96,6 +120,7 @@ export default function TeamTaskForm() {
   const [selectedTags, setSelectedTags] = useState<string[]>(["tareas"]);
   const [hours, setHours] = useState("");
   const [subtasks, setSubtasks] = useState<TeamSubtaskInput[]>([]);
+  const [additionalTasks, setAdditionalTasks] = useState<AdditionalTaskDraft[]>([]);
 
   const busy = status === "loading" || status === "structuring";
 
@@ -113,6 +138,7 @@ export default function TeamTaskForm() {
       setUsers(data.users);
       setProjects(data.projects);
       setClientProjects(data.clientProjects);
+      setEpicParents(data.parents.filter((p) => p.ticketType === "Épica"));
 
       if (data.projects.length > 0) {
         const fromUrl = searchParams.get("proyecto_notion");
@@ -143,10 +169,24 @@ export default function TeamTaskForm() {
   const projectLabel =
     projects.find((p) => p.relationId === projectRelationId)?.label ?? "";
 
+  function toggleId(list: string[], id: string, setter: (v: string[]) => void) {
+    setter(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  }
+
   function toggleTag(tag: string) {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
+  }
+
+  function handleTypeChange(type: TeamTicketType) {
+    setTicketType(type);
+    setAiPrepared(false);
+    if (type !== "Épica") setSubtasks([]);
+    if (type !== "Tarea") {
+      setAdditionalTasks([]);
+      setParentTaskId("");
+    }
   }
 
   function updateSubtask(index: number, patch: Partial<TeamSubtaskInput>) {
@@ -162,6 +202,20 @@ export default function TeamTaskForm() {
 
   function removeSubtask(index: number) {
     setSubtasks((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addAdditionalTask() {
+    setAdditionalTasks((prev) => [...prev, { id: uid(), rawInput: "" }]);
+  }
+
+  function updateAdditionalTask(id: string, rawInput: string) {
+    setAdditionalTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, rawInput } : t))
+    );
+  }
+
+  function removeAdditionalTask(id: string) {
+    setAdditionalTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
   async function handlePrepare() {
@@ -201,13 +255,20 @@ export default function TeamTaskForm() {
       setCategory(f.category);
       setSelectedTags(f.tags);
       if (f.hours != null) setHours(String(f.hours));
-      setSubtasks(
-        f.subtasks.map((s) => ({
-          title: s.title,
-          shortDescription: s.shortDescription,
-          enabled: true,
-        }))
-      );
+
+      if (ticketType === "Épica") {
+        setSubtasks(
+          f.subtasks.map((s) => ({
+            title: s.title,
+            shortDescription: s.shortDescription,
+            bodyMarkdown: s.bodyMarkdown,
+            enabled: true,
+          }))
+        );
+      } else {
+        setSubtasks([]);
+      }
+
       setAiPrepared(true);
       setShowPreview(true);
       setStatus("idle");
@@ -221,8 +282,8 @@ export default function TeamTaskForm() {
     e.preventDefault();
     if (busy) return;
 
-    if (!assigneeId) {
-      setErrorMsg("Selecciona a quién se asigna la tarea.");
+    if (assigneeIds.length === 0) {
+      setErrorMsg("Selecciona al menos un responsable.");
       setStatus("error");
       return;
     }
@@ -250,12 +311,30 @@ export default function TeamTaskForm() {
       const formData = new FormData(e.currentTarget);
       formData.set("tags", selectedTags.join(","));
       formData.set("rawInput", rawInput);
-      formData.set("subtasksJson", JSON.stringify(subtasks));
+      formData.set("assigneeIds", JSON.stringify(assigneeIds));
+      formData.set("reviewerIds", JSON.stringify(reviewerIds));
+      formData.set("subtasksJson", JSON.stringify(ticketType === "Épica" ? subtasks : []));
+      formData.set(
+        "additionalTasksJson",
+        JSON.stringify(
+          ticketType === "Tarea"
+            ? additionalTasks
+                .filter((t) => t.rawInput.trim())
+                .map((t) => ({
+                  rawInput: t.rawInput.trim(),
+                  title: "",
+                  shortDescription: "",
+                  bodyMarkdown: "",
+                }))
+            : []
+        )
+      );
       formData.set("useAi", aiPrepared ? "false" : "true");
       formData.set("projectLabel", projectLabel);
       formData.set("clientProject", clientProject);
       formData.set("environment", environment);
       formData.set("scope", scope);
+      formData.set("parentTaskId", ticketType === "Tarea" ? parentTaskId : "");
       for (const file of evidenceFiles) {
         formData.append("images", file);
       }
@@ -297,6 +376,10 @@ export default function TeamTaskForm() {
     setSelectedTags(["tareas"]);
     setHours("");
     setSubtasks([]);
+    setAdditionalTasks([]);
+    setAssigneeIds([]);
+    setReviewerIds([]);
+    setParentTaskId("");
     setEnvironment("Desarrollo");
     setScope("Frontend");
     if (clientProjects.length > 0) {
@@ -328,7 +411,34 @@ export default function TeamTaskForm() {
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
       noValidate
     >
-      {/* --- Ingesta PM --- */}
+      {/* Tipo primero */}
+      <div className={sectionClasses}>
+        <SectionTitle>Tipo de ticket</SectionTitle>
+        <div className="flex gap-2">
+          {TICKET_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              disabled={busy}
+              className={typeButtonClass(ticketType === type)}
+              onClick={() => handleTypeChange(type)}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+        <input type="hidden" name="ticketType" value={ticketType} />
+        <p className="text-xs text-[#787774]">
+          {ticketType === "Tarea" &&
+            "Se crea como tarea simple. Puedes vincularla a una épica o agregar más tareas en el mismo envío."}
+          {ticketType === "Bug" &&
+            "Formato QA: contexto, detalle técnico, pasos y criterio de cierre."}
+          {ticketType === "Épica" &&
+            "La IA sugiere subtareas con formato completo bajo esta épica."}
+        </p>
+      </div>
+
+      {/* Ingesta */}
       <div className={sectionClasses}>
         <SectionTitle>Ingesta</SectionTitle>
 
@@ -351,10 +461,6 @@ export default function TeamTaskForm() {
         </div>
 
         <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
-
-        <p className="text-xs text-[#9b9a97]">
-          Proyecto y Proyecto Cliente son campos independientes en Notion; puedes combinarlos libremente.
-        </p>
 
         <div>
           <label htmlFor="projectRelationId" className={labelClasses}>Proyecto</label>
@@ -442,50 +548,77 @@ export default function TeamTaskForm() {
         </div>
 
         <div>
-          <label htmlFor="assigneeId" className={labelClasses}>Responsable</label>
-          <select
-            id="assigneeId"
-            name="assigneeId"
-            required
-            disabled={busy || loadingOptions}
-            value={assigneeId}
-            onChange={(e) => setAssigneeId(e.target.value)}
-            className={fieldClasses}
-          >
-            <option value="">
-              {loadingOptions ? "Cargando equipo…" : "Selecciona una persona"}
-            </option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
+          <span className={labelClasses}>Responsables</span>
+          {loadingOptions ? (
+            <p className="text-sm text-[#9b9a97]">Cargando equipo…</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {users.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => toggleId(assigneeIds, u.id, setAssigneeIds)}
+                  className={chipClass(assigneeIds.includes(u.id))}
+                >
+                  {u.name}
+                </button>
+              ))}
+            </div>
+          )}
           {!loadingOptions && users.length === 0 && (
             <p className="mt-1 text-xs text-[#b5403a]">
               No se cargaron responsables. Verifica permisos de la integración Notion.
             </p>
           )}
+          <p className="mt-1.5 text-xs text-[#9b9a97]">Puedes seleccionar uno o varios.</p>
         </div>
 
         <div>
-          <span className={labelClasses}>Tipo</span>
-          <div className="flex gap-2">
-            {TICKET_TYPES.map((type) => (
-              <button
-                key={type}
-                type="button"
-                disabled={busy}
-                className={typeButtonClass(ticketType === type)}
-                onClick={() => {
-                  setTicketType(type);
-                  setAiPrepared(false);
-                }}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-          <input type="hidden" name="ticketType" value={ticketType} />
+          <span className={labelClasses}>Revisores</span>
+          {loadingOptions ? (
+            <p className="text-sm text-[#9b9a97]">Cargando equipo…</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {users.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => toggleId(reviewerIds, u.id, setReviewerIds)}
+                  className={chipClass(reviewerIds.includes(u.id))}
+                >
+                  {u.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-1.5 text-xs text-[#9b9a97]">Opcional. Toca para seleccionar revisores.</p>
         </div>
+
+        {ticketType === "Tarea" && (
+          <div>
+            <label htmlFor="parentTaskId" className={labelClasses}>Épica padre (opcional)</label>
+            <select
+              id="parentTaskId"
+              name="parentTaskId"
+              disabled={busy || loadingOptions}
+              value={parentTaskId}
+              onChange={(e) => setParentTaskId(e.target.value)}
+              className={fieldClasses}
+            >
+              <option value="">Sin épica — tarea independiente</option>
+              {epicParents.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-[#9b9a97]">
+              Solo se listan tickets con tipo Épica en Notion.
+            </p>
+          </div>
+        )}
 
         <button
           type="button"
@@ -498,15 +631,65 @@ export default function TeamTaskForm() {
         </button>
       </div>
 
-      {/* --- Subtareas (opcional) --- */}
-      <div className={sectionClasses}>
-        <SectionTitle>Subtareas</SectionTitle>
-        <p className="text-xs text-[#9b9a97]">
-          Opcional. La IA sugiere subtareas en épicas; también puedes agregarlas manualmente.
-        </p>
+      {/* Tareas adicionales (solo Tarea) */}
+      {ticketType === "Tarea" && (
+        <div className={sectionClasses}>
+          <SectionTitle>Más tareas</SectionTitle>
+          <p className="text-xs text-[#787774]">
+            Cada idea se crea como tarea independiente (no subtarea), con los mismos responsables y proyecto.
+          </p>
+
+          {additionalTasks.length === 0 ? (
+            <p className="text-sm text-[#9b9a97]">Opcional. Agrega otra tarea si necesitas crear varias a la vez.</p>
+          ) : (
+            <ul className="space-y-3">
+              {additionalTasks.map((task, index) => (
+                <li key={task.id} className="rounded-md border border-[#efefef] p-3">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-medium text-[#787774]">Tarea {index + 2}</span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => removeAdditionalTask(task.id)}
+                      className="text-xs text-[#b5403a] hover:underline"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                  <textarea
+                    value={task.rawInput}
+                    disabled={busy}
+                    onChange={(e) => updateAdditionalTask(task.id, e.target.value)}
+                    rows={2}
+                    placeholder="Describe otra tarea…"
+                    className={`${fieldClasses} resize-y`}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={addAdditionalTask}
+            className="inline-flex items-center gap-1 rounded-md border border-[#efefef] bg-[#f7f7f5] px-3 py-2 text-sm font-medium text-[#37352f] transition hover:bg-[#efefef]"
+          >
+            + Agregar otra tarea
+          </button>
+        </div>
+      )}
+
+      {/* Subtareas (solo Épica) */}
+      {ticketType === "Épica" && (
+        <div className={sectionClasses}>
+          <SectionTitle>Subtareas recomendadas</SectionTitle>
+          <p className="text-xs text-[#787774]">
+            La IA genera subtareas con formato completo. Desmarca las que no quieras crear.
+          </p>
 
           {subtasks.length === 0 ? (
-            <p className="text-sm text-[#787774]">Prepara con IA o agrega subtareas manualmente.</p>
+            <p className="text-sm text-[#787774]">Prepara con IA para ver subtareas sugeridas.</p>
           ) : (
             <ul className="space-y-2">
               {subtasks.map((sub, index) => (
@@ -547,11 +730,12 @@ export default function TeamTaskForm() {
             onClick={addSubtask}
             className="text-sm text-[#2383e2] hover:underline"
           >
-            + Agregar subtarea
+            + Agregar subtarea manualmente
           </button>
         </div>
+      )}
 
-      {/* --- Preview --- */}
+      {/* Preview */}
       {(showPreview || aiPrepared) && (
         <div className={sectionClasses}>
           <button
@@ -606,21 +790,30 @@ export default function TeamTaskForm() {
         </div>
       )}
 
-      {/* --- Avanzado --- */}
+      {/* Detalles avanzados — más visible */}
       <div className={sectionClasses}>
         <button
           type="button"
-          className="flex w-full items-center justify-between text-left"
+          disabled={busy}
+          className={
+            "flex w-full items-center justify-between rounded-md border-2 px-4 py-3 text-left transition " +
+            (showAdvanced
+              ? "border-[#2383e2] bg-[#e8f3fc]"
+              : "border-dashed border-[#b9b9b7] bg-[#fafafa] hover:border-[#2383e2] hover:bg-[#f0f7fd]")
+          }
           onClick={() => setShowAdvanced((v) => !v)}
         >
-          <SectionTitle>Detalles avanzados</SectionTitle>
-          <span className="text-xs text-[#9b9a97]">
-            {showAdvanced ? "Ocultar" : "Mostrar"} (prioridad, etiquetas…)
+          <div>
+            <p className="text-sm font-semibold text-[#37352f]">Detalles avanzados</p>
+            <p className="text-xs text-[#787774]">Prioridad, categoría, etiquetas, enlace PR, horas</p>
+          </div>
+          <span className="shrink-0 text-xs font-medium text-[#2383e2]">
+            {showAdvanced ? "Ocultar ▲" : "Mostrar ▼"}
           </span>
         </button>
 
         {showAdvanced && (
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-md border border-[#efefef] bg-white p-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="priority" className={labelClasses}>Prioridad</label>
@@ -657,25 +850,17 @@ export default function TeamTaskForm() {
             <div>
               <span className={labelClasses}>Etiquetas</span>
               <div className="flex flex-wrap gap-2">
-                {TEAM_TAG_SUGGESTIONS.map((tag) => {
-                  const active = selectedTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => toggleTag(tag)}
-                      className={
-                        "rounded-full border px-2.5 py-1 text-xs font-medium transition " +
-                        (active
-                          ? "border-[#2383e2] bg-[#e8f3fc] text-[#1a73d1]"
-                          : "border-[#efefef] bg-[#f7f7f5] text-[#787774] hover:border-[#d3d1cb]")
-                      }
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
+                {TEAM_TAG_SUGGESTIONS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => toggleTag(tag)}
+                    className={chipClass(selectedTags.includes(tag))}
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
               <input type="hidden" name="tags" value={selectedTags.join(",")} />
             </div>
@@ -690,17 +875,16 @@ export default function TeamTaskForm() {
                 <input
                   id="hours"
                   name="hours"
-                  type="number"
-                  min="0"
-                  step="0.5"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ej. 4 o 2.5"
                   value={hours}
-                  onChange={(e) => setHours(e.target.value)}
+                  onChange={(e) => setHours(e.target.value.replace(/[^\d.,]/g, ""))}
                   disabled={busy}
                   className={fieldClasses}
                 />
               </div>
             </div>
-
           </div>
         )}
       </div>

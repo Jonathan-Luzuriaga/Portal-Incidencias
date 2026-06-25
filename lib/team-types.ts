@@ -31,7 +31,16 @@ export interface TeamClientProjectOption {
 export interface TeamSubtaskInput {
   title: string;
   shortDescription: string;
+  bodyMarkdown?: string;
   enabled: boolean;
+}
+
+/** Tareas adicionales en un mismo envío (tipo Tarea, sin subtareas). */
+export interface TeamAdditionalTaskInput {
+  rawInput: string;
+  title: string;
+  shortDescription: string;
+  bodyMarkdown: string;
 }
 
 export interface TeamUserOption {
@@ -56,8 +65,10 @@ export interface TeamTaskFormData {
   client: TeamClient;
   clientProject: string;
   projectRelationId: string;
-  assigneeId: string;
+  assigneeIds: string[];
+  reviewerIds: string[];
   parentTaskId: string;
+  additionalTasks: TeamAdditionalTaskInput[];
   environment: TeamEnvironment;
   scope: TeamScope;
   categories: string[];
@@ -94,6 +105,7 @@ export type TeamTaskApiResponse = TeamTaskApiSuccess | TeamTaskApiError;
 export interface FormattedSubtask {
   title: string;
   shortDescription: string;
+  bodyMarkdown?: string;
 }
 
 /** Resultado estructurado por DeepSeek a partir de texto en bruto. */

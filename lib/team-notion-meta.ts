@@ -22,7 +22,7 @@ const PLACEHOLDER_PROJECT_TITLES = new Set([
   "",
 ]);
 
-const PARENT_TICKET_TYPES = ["Épica", "Tarea"];
+const PARENT_TICKET_TYPES = ["Épica"];
 
 async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"): Promise<string> {
   if (cache === "tasks" && cachedTasksDataSourceId) return cachedTasksDataSourceId;
