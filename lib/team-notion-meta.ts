@@ -22,7 +22,7 @@ const PLACEHOLDER_PROJECT_TITLES = new Set([
   "",
 ]);
 
-const PARENT_TICKET_TYPES = ["Épica"];
+const PARENT_TICKET_TYPES = ["Épica", "Tarea"];
 
 async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"): Promise<string> {
   if (cache === "tasks" && cachedTasksDataSourceId) return cachedTasksDataSourceId;
@@ -95,6 +95,16 @@ function extractPageTitle(
 function extractSelect(page: { properties: Record<string, unknown> }, propName: string): string {
   const prop = page.properties[propName] as { select?: { name?: string } | null } | undefined;
   return prop?.select?.name ?? "";
+}
+
+function extractRelationId(page: { properties: Record<string, unknown> }, propName: string): string {
+  const prop = page.properties[propName] as { relation?: Array<{ id?: string }> } | undefined;
+  return prop?.relation?.[0]?.id ?? "";
+}
+
+function extractMultiSelectFirst(page: { properties: Record<string, unknown> }, propName: string): string {
+  const prop = page.properties[propName] as { multi_select?: Array<{ name?: string }> } | undefined;
+  return prop?.multi_select?.[0]?.name ?? "";
 }
 
 function isPlaceholderProjectTitle(title: string): boolean {
@@ -337,8 +347,7 @@ export async function listTeamUsers(): Promise<TeamUserOption[]> {
 }
 
 /**
- * Épicas y tareas candidatas a padre.
- * Proyecto y Proyecto Cliente son independientes en Notion: no se filtra por proyecto.
+ * Épicas y tareas candidatas a padre (con proyecto y proyecto cliente para filtrar en UI).
  */
 export async function listParentTasks(): Promise<TeamParentOption[]> {
   const config = getNotionConfig();
@@ -368,6 +377,8 @@ export async function listParentTasks(): Promise<TeamParentOption[]> {
         id: page.id,
         title,
         ticketType: extractSelect(page, props.ticketType),
+        projectRelationId: extractRelationId(page, props.project),
+        clientProject: extractMultiSelectFirst(page, props.clientProject),
       });
     }
 

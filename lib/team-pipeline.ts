@@ -114,7 +114,12 @@ async function createOneTask(
 export async function processAndCreateTeamTask(
   form: TeamTaskFormData,
   imageFiles: File[],
-  options?: { rawDescription?: string; useAi?: boolean; projectLabel?: string }
+  options?: {
+    rawDescription?: string;
+    useAi?: boolean;
+    projectLabel?: string;
+    additionalImages?: File[][];
+  }
 ): Promise<CreatedTeamTaskSummary[]> {
   const { form: finalForm, fileUploadIds } = await resolveTaskForm(form, options ?? {}, imageFiles);
 
@@ -165,7 +170,8 @@ export async function processAndCreateTeamTask(
   }
 
   if (finalForm.ticketType === "Tarea") {
-    for (const extra of finalForm.additionalTasks) {
+    for (let i = 0; i < finalForm.additionalTasks.length; i++) {
+      const extra = finalForm.additionalTasks[i];
       if (!extra.rawInput.trim() && !extra.title.trim()) continue;
 
       let extraForm: TeamTaskFormData = {
@@ -202,7 +208,9 @@ export async function processAndCreateTeamTask(
         };
       }
 
-      const summary = await createOneTask(extraForm, []);
+      const extraImages = options?.additionalImages?.[i] ?? [];
+      const extraUploadIds = await uploadEvidenceImages(extraImages);
+      const summary = await createOneTask(extraForm, extraUploadIds);
       created.push(summary);
     }
   }

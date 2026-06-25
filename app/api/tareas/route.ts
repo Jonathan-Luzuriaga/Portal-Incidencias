@@ -200,11 +200,25 @@ export async function POST(request: Request): Promise<NextResponse<TeamTaskApiRe
     }
   }
 
+  const additionalImages = parsed.additionalTasks.map((_, i) =>
+    form
+      .getAll(`additionalImages_${i}`)
+      .filter((v): v is File => v instanceof File && v.size > 0)
+  );
+  for (const batch of additionalImages) {
+    for (const file of batch) {
+      if (!file.type.startsWith("image/")) {
+        return bad(`El archivo "${file.name}" no es una imagen.`);
+      }
+    }
+  }
+
   try {
     const created = await processAndCreateTeamTask(parsed, files, {
       rawDescription: rawInput,
       useAi: useAi || Boolean(rawInput && !parsed.title),
       projectLabel: projectLabel || undefined,
+      additionalImages,
     });
 
     const main = created[0];

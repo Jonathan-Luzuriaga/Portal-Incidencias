@@ -53,6 +53,8 @@ export interface TeamParentOption {
   id: string;
   title: string;
   ticketType: string;
+  projectRelationId: string;
+  clientProject: string;
 }
 
 /** Datos del formulario interno de equipo (ingesta PM). */

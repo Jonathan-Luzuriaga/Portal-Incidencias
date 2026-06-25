@@ -30,7 +30,10 @@ type Status = "idle" | "loading" | "structuring" | "success" | "error";
 interface AdditionalTaskDraft {
   id: string;
   rawInput: string;
+  imageFiles: File[];
 }
+
+type ParentTypeFilter = "Épica" | "Tarea";
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
@@ -103,12 +106,15 @@ export default function TeamTaskForm() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [parentTaskId, setParentTaskId] = useState("");
+  const [parentTypeFilter, setParentTypeFilter] = useState<ParentTypeFilter>("Épica");
+  const [parentProjectFilter, setParentProjectFilter] = useState("");
+  const [parentClientProjectFilter, setParentClientProjectFilter] = useState("");
   const [ticketType, setTicketType] = useState<TeamTicketType>("Tarea");
 
   const [users, setUsers] = useState<TeamUserOption[]>([]);
   const [projects, setProjects] = useState<TeamProjectOption[]>([]);
   const [clientProjects, setClientProjects] = useState<TeamClientProjectOption[]>([]);
-  const [epicParents, setEpicParents] = useState<TeamParentOption[]>([]);
+  const [allParents, setAllParents] = useState<TeamParentOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsError, setOptionsError] = useState("");
 
@@ -138,7 +144,7 @@ export default function TeamTaskForm() {
       setUsers(data.users);
       setProjects(data.projects);
       setClientProjects(data.clientProjects);
-      setEpicParents(data.parents.filter((p) => p.ticketType === "Épica"));
+      setAllParents(data.parents);
 
       if (data.projects.length > 0) {
         const fromUrl = searchParams.get("proyecto_notion");
@@ -165,6 +171,27 @@ export default function TeamTaskForm() {
   useEffect(() => {
     loadOptions();
   }, [loadOptions]);
+
+  useEffect(() => {
+    setParentProjectFilter(projectRelationId);
+  }, [projectRelationId]);
+
+  useEffect(() => {
+    setParentClientProjectFilter(clientProject);
+  }, [clientProject]);
+
+  const filteredParents = allParents.filter((p) => {
+    if (p.ticketType !== parentTypeFilter) return false;
+    if (parentProjectFilter && p.projectRelationId !== parentProjectFilter) return false;
+    if (parentClientProjectFilter && p.clientProject !== parentClientProjectFilter) return false;
+    return true;
+  });
+
+  useEffect(() => {
+    if (parentTaskId && !filteredParents.some((p) => p.id === parentTaskId)) {
+      setParentTaskId("");
+    }
+  }, [filteredParents, parentTaskId]);
 
   const projectLabel =
     projects.find((p) => p.relationId === projectRelationId)?.label ?? "";
@@ -205,12 +232,18 @@ export default function TeamTaskForm() {
   }
 
   function addAdditionalTask() {
-    setAdditionalTasks((prev) => [...prev, { id: uid(), rawInput: "" }]);
+    setAdditionalTasks((prev) => [...prev, { id: uid(), rawInput: "", imageFiles: [] }]);
   }
 
   function updateAdditionalTask(id: string, rawInput: string) {
     setAdditionalTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, rawInput } : t))
+    );
+  }
+
+  function updateAdditionalTaskImages(id: string, imageFiles: File[]) {
+    setAdditionalTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, imageFiles } : t))
     );
   }
 
@@ -314,21 +347,23 @@ export default function TeamTaskForm() {
       formData.set("assigneeIds", JSON.stringify(assigneeIds));
       formData.set("reviewerIds", JSON.stringify(reviewerIds));
       formData.set("subtasksJson", JSON.stringify(ticketType === "Épica" ? subtasks : []));
+      const filledAdditional = additionalTasks.filter((t) => t.rawInput.trim());
       formData.set(
         "additionalTasksJson",
         JSON.stringify(
-          ticketType === "Tarea"
-            ? additionalTasks
-                .filter((t) => t.rawInput.trim())
-                .map((t) => ({
-                  rawInput: t.rawInput.trim(),
-                  title: "",
-                  shortDescription: "",
-                  bodyMarkdown: "",
-                }))
-            : []
+          filledAdditional.map((t) => ({
+            rawInput: t.rawInput.trim(),
+            title: "",
+            shortDescription: "",
+            bodyMarkdown: "",
+          }))
         )
       );
+      filledAdditional.forEach((task, i) => {
+        for (const file of task.imageFiles) {
+          formData.append(`additionalImages_${i}`, file);
+        }
+      });
       formData.set("useAi", aiPrepared ? "false" : "true");
       formData.set("projectLabel", projectLabel);
       formData.set("clientProject", clientProject);
@@ -380,6 +415,7 @@ export default function TeamTaskForm() {
     setAssigneeIds([]);
     setReviewerIds([]);
     setParentTaskId("");
+    setParentTypeFilter("Épica");
     setEnvironment("Desarrollo");
     setScope("Frontend");
     if (clientProjects.length > 0) {
@@ -597,8 +633,62 @@ export default function TeamTaskForm() {
         </div>
 
         {ticketType === "Tarea" && (
-          <div>
-            <label htmlFor="parentTaskId" className={labelClasses}>Épica padre (opcional)</label>
+          <div className="space-y-3 rounded-md border border-[#efefef] bg-[#fafafa] p-3">
+            <label htmlFor="parentTaskId" className={labelClasses}>Tarea padre (opcional)</label>
+
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-[#787774]">Tipo de ticket padre</span>
+              <div className="flex gap-2">
+                {(["Épica", "Tarea"] as ParentTypeFilter[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={busy}
+                    className={typeButtonClass(parentTypeFilter === type)}
+                    onClick={() => setParentTypeFilter(type)}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="parentProjectFilter" className="mb-1.5 block text-xs font-medium text-[#787774]">
+                Proyecto
+              </label>
+              <select
+                id="parentProjectFilter"
+                disabled={busy || loadingOptions}
+                value={parentProjectFilter}
+                onChange={(e) => setParentProjectFilter(e.target.value)}
+                className={fieldClasses}
+              >
+                <option value="">Todos los proyectos</option>
+                {projects.map((opt) => (
+                  <option key={opt.relationId} value={opt.relationId}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="parentClientProjectFilter" className="mb-1.5 block text-xs font-medium text-[#787774]">
+                Proyecto Cliente
+              </label>
+              <select
+                id="parentClientProjectFilter"
+                disabled={busy || loadingOptions}
+                value={parentClientProjectFilter}
+                onChange={(e) => setParentClientProjectFilter(e.target.value)}
+                className={fieldClasses}
+              >
+                <option value="">Todos los proyectos cliente</option>
+                {clientProjects.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
             <select
               id="parentTaskId"
               name="parentTaskId"
@@ -607,15 +697,15 @@ export default function TeamTaskForm() {
               onChange={(e) => setParentTaskId(e.target.value)}
               className={fieldClasses}
             >
-              <option value="">Sin épica — tarea independiente</option>
-              {epicParents.map((p) => (
+              <option value="">Sin tarea padre — independiente</option>
+              {filteredParents.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.title}
                 </option>
               ))}
             </select>
-            <p className="mt-1.5 text-xs text-[#9b9a97]">
-              Solo se listan tickets con tipo Épica en Notion.
+            <p className="text-xs text-[#9b9a97]">
+              Filtra por tipo Épica o Tarea, proyecto y proyecto cliente.
             </p>
           </div>
         )}
@@ -636,7 +726,9 @@ export default function TeamTaskForm() {
         <div className={sectionClasses}>
           <SectionTitle>Más tareas</SectionTitle>
           <p className="text-xs text-[#787774]">
-            Cada idea se crea como tarea independiente (no subtarea), con los mismos responsables y proyecto.
+            <span className="underline">
+              Cada idea se crea como tarea independiente (no subtarea), con los mismos responsables y proyecto.
+            </span>
           </p>
 
           {additionalTasks.length === 0 ? (
@@ -664,6 +756,12 @@ export default function TeamTaskForm() {
                     placeholder="Describe otra tarea…"
                     className={`${fieldClasses} resize-y`}
                   />
+                  <div className="mt-2">
+                    <EvidenceInput
+                      disabled={busy}
+                      onChange={(files) => updateAdditionalTaskImages(task.id, files)}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -683,13 +781,13 @@ export default function TeamTaskForm() {
       {/* Subtareas (solo Épica) */}
       {ticketType === "Épica" && (
         <div className={sectionClasses}>
-          <SectionTitle>Subtareas recomendadas</SectionTitle>
+          <SectionTitle>Tareas</SectionTitle>
           <p className="text-xs text-[#787774]">
-            La IA genera subtareas con formato completo. Desmarca las que no quieras crear.
+            La IA genera tareas con formato completo. Desmarca las que no quieras crear.
           </p>
 
           {subtasks.length === 0 ? (
-            <p className="text-sm text-[#787774]">Prepara con IA para ver subtareas sugeridas.</p>
+            <p className="text-sm text-[#787774]">Prepara con IA para ver tareas sugeridas.</p>
           ) : (
             <ul className="space-y-2">
               {subtasks.map((sub, index) => (
@@ -707,7 +805,7 @@ export default function TeamTaskForm() {
                       value={sub.title}
                       disabled={busy}
                       onChange={(e) => updateSubtask(index, { title: e.target.value })}
-                      placeholder="Título de subtarea"
+                      placeholder="Título de tarea"
                       className={fieldClasses}
                     />
                   </div>
@@ -730,7 +828,7 @@ export default function TeamTaskForm() {
             onClick={addSubtask}
             className="text-sm text-[#2383e2] hover:underline"
           >
-            + Agregar subtarea manualmente
+            + Agregar tarea manualmente
           </button>
         </div>
       )}
