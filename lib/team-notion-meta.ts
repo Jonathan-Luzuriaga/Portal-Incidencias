@@ -1,26 +1,22 @@
 import { getNotionClient } from "./notion-client";
 import { getNotionConfig } from "./notion-config";
 import { getTeamNotionProps } from "./team-notion-config";
+import {
+  isCanonicalProjectLabel,
+  TEAM_PROJECT_OPTIONS,
+} from "./team-profiles";
 import type {
   TeamClientProjectOption,
   TeamParentOption,
+  TeamProjectFieldMode,
   TeamProjectOption,
   TeamUserOption,
 } from "./team-types";
+import { getEnsuredTeamUserIds } from "./team-defaults";
 import { ServiceError } from "./types";
 
 let cachedTasksDataSourceId: string | null = null;
 let cachedProjectsDataSourceId: string | null = null;
-
-const PLACEHOLDER_PROJECT_TITLES = new Set([
-  "nuevo proyecto",
-  "new project",
-  "sin título",
-  "sin titulo",
-  "untitled",
-  "proyecto nuevo",
-  "",
-]);
 
 const PARENT_TICKET_TYPES = ["Épica", "Tarea"];
 
@@ -107,74 +103,157 @@ function extractMultiSelectFirst(page: { properties: Record<string, unknown> }, 
   return prop?.multi_select?.[0]?.name ?? "";
 }
 
-function isPlaceholderProjectTitle(title: string): boolean {
-  return PLACEHOLDER_PROJECT_TITLES.has(title.trim().toLowerCase());
-}
+let cachedProjectFieldMode: TeamProjectFieldMode | null = null;
 
-/** Proyectos reales desde la BD Proyectos de Notion (sin placeholders). */
-export async function listNotionProjects(): Promise<TeamProjectOption[]> {
-  const databaseId = getProjectsDatabaseId();
-  if (!databaseId) {
-    const { TEAM_PROJECT_OPTIONS } = await import("./team-profiles");
-    return TEAM_PROJECT_OPTIONS;
+type SchemaProp = {
+  type?: string;
+  multi_select?: { options?: Array<{ name: string }> };
+  select?: { options?: Array<{ name: string }> };
+  relation?: { database_id?: string };
+};
+
+async function getTasksSchemaProperties(): Promise<Record<string, SchemaProp>> {
+  const notion = getNotionClient();
+  const config = getNotionConfig();
+  const dsId = await getDataSourceId(config.databaseId, "tasks");
+
+  const ds = await notion.request<{ properties?: Record<string, SchemaProp> }>({
+    path: `data_sources/${dsId}`,
+    method: "get",
+  });
+
+  if (ds.properties && Object.keys(ds.properties).length > 0) {
+    return ds.properties;
   }
 
-  const titleProp = process.env.NOTION_PROJECTS_TITLE_PROP ?? "Project name";
+  const db = await notion.request<{
+    properties?: Record<string, SchemaProp>;
+    data_sources?: Array<{ properties?: Record<string, SchemaProp> }>;
+  }>({
+    path: `databases/${config.databaseId}`,
+    method: "get",
+  });
+
+  return db.properties ?? db.data_sources?.[0]?.properties ?? {};
+}
+
+/** Modo de la columna Proyecto en la BD Tareas (relation, select o multi_select). */
+export async function getProjectFieldMode(): Promise<TeamProjectFieldMode> {
+  if (cachedProjectFieldMode) return cachedProjectFieldMode;
+
+  const config = getNotionConfig();
+  const properties = await getTasksSchemaProperties();
+  const prop = properties[config.props.project];
+  const type = prop?.type ?? "";
+
+  if (type === "select") cachedProjectFieldMode = "select";
+  else if (type === "multi_select") cachedProjectFieldMode = "multi_select";
+  else cachedProjectFieldMode = "relation";
+
+  return cachedProjectFieldMode;
+}
+
+function mapCanonicalProjects(
+  entries: Array<{ value: string; label: string }>
+): TeamProjectOption[] {
+  const byLabel = new Map<string, TeamProjectOption>();
+  for (const entry of entries) {
+    if (!isCanonicalProjectLabel(entry.label)) continue;
+    const key = entry.label.trim().toLowerCase();
+    if (!byLabel.has(key)) {
+      byLabel.set(key, { relationId: entry.value, label: entry.label.trim() });
+    }
+  }
+  return [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label, "es"));
+}
+
+/** Proyectos desde la columna Proyecto (esquema Notion), sin New Project. */
+export async function listNotionProjects(): Promise<TeamProjectOption[]> {
+  const config = getNotionConfig();
+  const propName = config.props.project;
 
   try {
-    const dsId = await getDataSourceId(databaseId, "projects");
-    const pages = await queryDataSourceAllPages<{ id: string; properties: Record<string, unknown> }>(
-      dsId,
-      { sorts: [{ property: titleProp, direction: "ascending" }] }
-    );
+    const properties = await getTasksSchemaProperties();
+    const prop = properties[propName];
+    const mode = await getProjectFieldMode();
 
-    const projects: TeamProjectOption[] = [];
-    for (const page of pages) {
-      const label = extractPageTitle(page, titleProp);
-      if (!label || isPlaceholderProjectTitle(label)) continue;
-      projects.push({ relationId: page.id, label });
+    if (mode === "select" || mode === "multi_select") {
+      const options = prop?.[mode]?.options ?? [];
+      const mapped = mapCanonicalProjects(
+        options.map((o) => ({ value: o.name, label: o.name }))
+      );
+      if (mapped.length > 0) return mapped;
     }
 
-    return projects.sort((a, b) => a.label.localeCompare(b.label, "es"));
+    const databaseId =
+      prop?.relation?.database_id?.replace(/-/g, "") ??
+      getProjectsDatabaseId()?.replace(/-/g, "") ??
+      null;
+
+    if (databaseId) {
+      const notion = getNotionClient();
+      const dsId = await getDataSourceId(databaseId, "projects");
+      const titleProp = process.env.NOTION_PROJECTS_TITLE_PROP ?? "Project name";
+
+      const pages = await queryDataSourceAllPages<{
+        id: string;
+        properties: Record<string, unknown>;
+      }>(dsId, { sorts: [{ property: titleProp, direction: "ascending" }] });
+
+      const entries: Array<{ value: string; label: string }> = [];
+      for (const page of pages) {
+        const label = extractPageTitle(page, titleProp);
+        if (!label) continue;
+        entries.push({ value: page.id, label });
+      }
+
+      const mapped = mapCanonicalProjects(entries);
+      if (mapped.length > 0) return mapped;
+    }
+
+    return TEAM_PROJECT_OPTIONS;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
     throw new ServiceError(`No se pudieron listar proyectos de Notion. ${message}`, 502);
   }
 }
 
-type SchemaProp = {
-  type?: string;
-  multi_select?: { options?: Array<{ name: string }> };
-  select?: { options?: Array<{ name: string }> };
-};
+/** Opciones de Etiquetas desde el esquema de la BD Tareas. */
+export async function listTagOptions(): Promise<string[]> {
+  const config = getNotionConfig();
+  const propName = config.props.tags;
+
+  try {
+    const properties = await getTasksSchemaProperties();
+    const prop = properties[propName];
+    const options = prop?.multi_select?.options ?? prop?.select?.options ?? [];
+
+    return options
+      .map((o) => o.name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "es"));
+  } catch {
+    return [];
+  }
+}
+
+function extractProjectValue(
+  page: { properties: Record<string, unknown> },
+  propName: string,
+  mode: TeamProjectFieldMode
+): string {
+  if (mode === "relation") return extractRelationId(page, propName);
+  if (mode === "select") return extractSelect(page, propName);
+  return extractMultiSelectFirst(page, propName);
+}
 
 /** Opciones de Proyecto Cliente desde el esquema (data source) de la BD Tareas. */
 export async function listClientProjectOptions(): Promise<TeamClientProjectOption[]> {
-  const notion = getNotionClient();
   const config = getNotionConfig();
   const propName = config.props.clientProject;
 
   try {
-    const dsId = await getDataSourceId(config.databaseId, "tasks");
-
-    const ds = await notion.request<{ properties?: Record<string, SchemaProp> }>({
-      path: `data_sources/${dsId}`,
-      method: "get",
-    });
-
-    let properties = ds.properties ?? {};
-
-    if (!properties[propName]) {
-      const db = await notion.request<{
-        properties?: Record<string, SchemaProp>;
-        data_sources?: Array<{ properties?: Record<string, SchemaProp> }>;
-      }>({
-        path: `databases/${config.databaseId}`,
-        method: "get",
-      });
-      properties = db.properties ?? db.data_sources?.[0]?.properties ?? properties;
-    }
-
+    const properties = await getTasksSchemaProperties();
     const prop = properties[propName];
     const options = prop?.multi_select?.options ?? prop?.select?.options ?? [];
 
@@ -241,13 +320,12 @@ async function listUsersFromWorkspace(): Promise<TeamUserOption[]> {
   return [...byId.values()];
 }
 
-/** IDs extra vía NOTION_EXTRA_ASSIGNEE_IDS (usuarios que la integración no lista sola). */
+/** IDs extra vía NOTION_EXTRA_ASSIGNEE_IDS / NOTION_TEAM_USER_IDS. */
 async function listExtraAssignees(): Promise<TeamUserOption[]> {
-  const raw = process.env.NOTION_EXTRA_ASSIGNEE_IDS?.trim();
-  if (!raw) return [];
+  const ids = getEnsuredTeamUserIds();
+  if (ids.length === 0) return [];
 
   const notion = getNotionClient();
-  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
   const users: TeamUserOption[] = [];
 
   for (const id of ids) {
@@ -302,7 +380,17 @@ async function listPeopleFromTaskPages(): Promise<TeamUserOption[]> {
   for (const page of pages) {
     stage(page.created_by?.id, page.created_by?.name);
     stage(page.last_edited_by?.id, page.last_edited_by?.name);
+    for (const prop of Object.values(page.properties)) {
+      const people = (prop as { people?: Array<{ id: string; name?: string | null }> }).people;
+      if (!people) continue;
+      for (const person of people) {
+        stage(person.id, person.name);
+      }
+    }
     for (const person of page.properties[teamProps.assignee]?.people ?? []) {
+      stage(person.id, person.name);
+    }
+    for (const person of page.properties["Revisores"]?.people ?? []) {
       stage(person.id, person.name);
     }
   }
@@ -352,6 +440,7 @@ export async function listTeamUsers(): Promise<TeamUserOption[]> {
 export async function listParentTasks(): Promise<TeamParentOption[]> {
   const config = getNotionConfig();
   const { props } = config;
+  const projectMode = await getProjectFieldMode();
 
   try {
     const dsId = await getDataSourceId(config.databaseId, "tasks");
@@ -377,7 +466,7 @@ export async function listParentTasks(): Promise<TeamParentOption[]> {
         id: page.id,
         title,
         ticketType: extractSelect(page, props.ticketType),
-        projectRelationId: extractRelationId(page, props.project),
+        projectRelationId: extractProjectValue(page, props.project, projectMode),
         clientProject: extractMultiSelectFirst(page, props.clientProject),
       });
     }

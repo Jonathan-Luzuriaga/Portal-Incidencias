@@ -124,6 +124,8 @@ export default function TeamTaskForm() {
   const [priority, setPriority] = useState("Media");
   const [category, setCategory] = useState("Workflows");
   const [selectedTags, setSelectedTags] = useState<string[]>(["tareas"]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([...TEAM_TAG_SUGGESTIONS]);
+  const [customTagInput, setCustomTagInput] = useState("");
   const [hours, setHours] = useState("");
   const [subtasks, setSubtasks] = useState<TeamSubtaskInput[]>([]);
   const [additionalTasks, setAdditionalTasks] = useState<AdditionalTaskDraft[]>([]);
@@ -145,6 +147,11 @@ export default function TeamTaskForm() {
       setProjects(data.projects);
       setClientProjects(data.clientProjects);
       setAllParents(data.parents);
+
+      const mergedTags = [
+        ...new Set([...TEAM_TAG_SUGGESTIONS, ...(data.tagSuggestions ?? [])]),
+      ].sort((a, b) => a.localeCompare(b, "es"));
+      setTagSuggestions(mergedTags);
 
       if (data.projects.length > 0) {
         const fromUrl = searchParams.get("proyecto_notion");
@@ -204,6 +211,14 @@ export default function TeamTaskForm() {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
+  }
+
+  function addCustomTag() {
+    const tag = customTagInput.trim().slice(0, 100);
+    if (!tag) return;
+    setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+    setTagSuggestions((prev) => (prev.includes(tag) ? prev : [...prev, tag].sort((a, b) => a.localeCompare(b, "es"))));
+    setCustomTagInput("");
   }
 
   function handleTypeChange(type: TeamTicketType) {
@@ -948,7 +963,7 @@ export default function TeamTaskForm() {
             <div>
               <span className={labelClasses}>Etiquetas</span>
               <div className="flex flex-wrap gap-2">
-                {TEAM_TAG_SUGGESTIONS.map((tag) => (
+                {tagSuggestions.map((tag) => (
                   <button
                     key={tag}
                     type="button"
@@ -959,6 +974,43 @@ export default function TeamTaskForm() {
                     {tag}
                   </button>
                 ))}
+                {selectedTags
+                  .filter((tag) => !tagSuggestions.includes(tag))
+                  .map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => toggleTag(tag)}
+                      className={chipClass(true)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="text"
+                  value={customTagInput}
+                  onChange={(e) => setCustomTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomTag();
+                    }
+                  }}
+                  disabled={busy}
+                  placeholder="Nueva etiqueta…"
+                  className={fieldClasses}
+                />
+                <button
+                  type="button"
+                  disabled={busy || !customTagInput.trim()}
+                  onClick={addCustomTag}
+                  className="shrink-0 rounded-md border border-[#efefef] bg-[#f7f7f5] px-3 py-2 text-sm font-medium text-[#37352f] transition hover:border-[#d3d1cb] disabled:opacity-50"
+                >
+                  Agregar
+                </button>
               </div>
               <input type="hidden" name="tags" value={selectedTags.join(",")} />
             </div>

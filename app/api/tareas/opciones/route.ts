@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import {
+  getProjectFieldMode,
   listClientProjectOptions,
   listNotionProjects,
   listParentTasks,
+  listTagOptions,
   listTeamUsers,
 } from "@/lib/team-notion-meta";
 import { TeamOptionsApiResponse } from "@/lib/team-types";
@@ -16,11 +18,14 @@ function bad(error: string, status = 400) {
 
 export async function GET(): Promise<NextResponse<TeamOptionsApiResponse>> {
   try {
-    const [usersR, projectsR, clientProjectsR, parentsR] = await Promise.allSettled([
+    const [usersR, projectsR, clientProjectsR, parentsR, projectModeR, tagsR] =
+      await Promise.allSettled([
       listTeamUsers(),
       listNotionProjects(),
       listClientProjectOptions(),
       listParentTasks(),
+      getProjectFieldMode(),
+      listTagOptions(),
     ]);
 
     if (usersR.status === "rejected") {
@@ -39,8 +44,11 @@ export async function GET(): Promise<NextResponse<TeamOptionsApiResponse>> {
       ok: true,
       users: usersR.value,
       projects: projectsR.status === "fulfilled" ? projectsR.value : [],
+      projectFieldMode:
+        projectModeR.status === "fulfilled" ? projectModeR.value : "relation",
       clientProjects: clientProjectsR.status === "fulfilled" ? clientProjectsR.value : [],
       parents: parentsR.status === "fulfilled" ? parentsR.value : [],
+      tagSuggestions: tagsR.status === "fulfilled" ? tagsR.value : [],
     });
   } catch (err) {
     if (err instanceof ServiceError) {

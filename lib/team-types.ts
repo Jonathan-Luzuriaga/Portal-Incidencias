@@ -23,6 +23,8 @@ export interface TeamProjectOption {
   label: string;
 }
 
+export type TeamProjectFieldMode = "relation" | "select" | "multi_select";
+
 export interface TeamClientProjectOption {
   value: string;
   label: string;
@@ -141,8 +143,10 @@ export interface TeamOptionsApiSuccess {
   ok: true;
   users: TeamUserOption[];
   projects: TeamProjectOption[];
+  projectFieldMode: TeamProjectFieldMode;
   clientProjects: TeamClientProjectOption[];
   parents: TeamParentOption[];
+  tagSuggestions: string[];
 }
 
 export interface TeamOptionsApiError {

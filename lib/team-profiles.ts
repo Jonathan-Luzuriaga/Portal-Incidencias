@@ -1,12 +1,21 @@
 import type { TeamClient, TeamClientProjectOption, TeamEnvironment, TeamScope } from "./team-types";
 
-/** Proyectos frecuentes (fallback si no hay NOTION_PROJECTS_DATABASE_ID). */
-export const TEAM_PROJECT_OPTIONS = [
-  { relationId: "32f4f339-cf21-803b-4a2c-29196fe31f6", label: "Manticore Labs — Gestión" },
-  { relationId: "32d4f339-cf21-80d7-a5a8d860913a99b1", label: "Bago — Zonales" },
-  { relationId: "32f4f339-cf21-8003-b4a2-c29196fe31f6", label: "Bago — SGC" },
-  { relationId: "45dac611-aded-4775-b62c-99f2f1bb945d", label: "Bago — MM360" },
-];
+/** Proyectos válidos en la columna Proyecto de Notion. */
+export const TEAM_PROJECT_NAMES = [
+  "Bago",
+  "Plasticaucho",
+  "Propuestas",
+  "Gestión Externa",
+  "Gestión Interna",
+  "CRM",
+  "DevOps Infra Servidores",
+] as const;
+
+/** Proyectos frecuentes (fallback si falla el esquema de Notion). */
+export const TEAM_PROJECT_OPTIONS = TEAM_PROJECT_NAMES.map((label) => ({
+  relationId: label,
+  label,
+}));
 
 /** Valores de Proyecto Cliente (fallback si falla el esquema de Notion). */
 export const TEAM_CLIENT_PROJECT_OPTIONS: TeamClientProjectOption[] = [
@@ -70,8 +79,38 @@ export const TEAM_TAG_SUGGESTIONS = [
 
 export const DEFAULT_TEAM_CLIENT: TeamClient = "Manticore Labs";
 export const DEFAULT_TEAM_CLIENT_PROJECT = "[ML][Gestion]";
-export const DEFAULT_TEAM_PROJECT =
-  TEAM_PROJECT_OPTIONS[0]?.relationId ?? "32f4f339-cf21-803b-4a2c-29196fe31f6";
+export const DEFAULT_TEAM_PROJECT = TEAM_PROJECT_OPTIONS[0]?.relationId ?? "Bago";
+
+export function normalizeTeamLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+const EXCLUDED_PROJECT_PATTERNS = [
+  "new project",
+  "nuevo proyecto",
+  "untitled",
+  "sin titulo",
+  "sin título",
+  "proyecto nuevo",
+];
+
+/** Excluye placeholders como New Project. */
+export function isExcludedProjectLabel(label: string): boolean {
+  const n = normalizeTeamLabel(label);
+  if (!n) return true;
+  return EXCLUDED_PROJECT_PATTERNS.some((p) => n.includes(p));
+}
+
+/** Solo los proyectos definidos en la columna Proyecto. */
+export function isCanonicalProjectLabel(label: string): boolean {
+  if (isExcludedProjectLabel(label)) return false;
+  const n = normalizeTeamLabel(label);
+  return TEAM_PROJECT_NAMES.some((name) => normalizeTeamLabel(name) === n);
+}
 
 const CLIENT_PROJECT_TO_TAG: Record<string, string> = {
   "[BAGO][SICAB-MG]": "sgc",

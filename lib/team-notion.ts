@@ -17,7 +17,8 @@ import {
 } from "./notion-properties";
 import { resolveCurrentSprintId } from "./notion-sprint";
 import { getTeamNotionProps } from "./team-notion-config";
-import { getDefaultTeamTags, buildTeamBodyMarkdown } from "./team-profiles";
+import { getProjectFieldMode } from "./team-notion-meta";
+import { getDefaultTeamTags, buildTeamBodyMarkdown, resolveTeamProject } from "./team-profiles";
 import type { TeamTaskFormData } from "./team-types";
 import { ServiceError } from "./types";
 
@@ -54,18 +55,28 @@ export async function createTeamTaskPage(
   const categories =
     form.categories.length > 0 ? form.categories : [form.category].filter(Boolean);
 
+  const projectMode = await getProjectFieldMode();
+  const projectValue = resolveTeamProject(form.projectRelationId);
+
   const properties: Record<string, unknown> = {
     [props.title]: notionTitle(form.title),
     [props.description]: notionRichText(form.shortDescription),
     [props.priority]: notionSelect(form.priority),
     [props.category]: notionMultiSelect(categories),
-    [props.project]: notionRelation([form.projectRelationId]),
     [props.client]: notionMultiSelect([form.client]),
     [props.clientProject]: notionMultiSelect([form.clientProject]),
     [props.ticketType]: notionSelect(form.ticketType),
     [props.status]: notionStatus(defaults.status),
     [props.tags]: notionMultiSelect(tags),
   };
+
+  if (projectMode === "relation") {
+    properties[props.project] = notionRelation([projectValue]);
+  } else if (projectMode === "select") {
+    properties[props.project] = notionSelect(projectValue);
+  } else {
+    properties[props.project] = notionMultiSelect([projectValue]);
+  }
 
   if (form.assigneeIds.length > 0) {
     properties[teamProps.assignee] = notionPeople(form.assigneeIds);

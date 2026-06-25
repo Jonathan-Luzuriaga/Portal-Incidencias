@@ -171,13 +171,13 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
 }
 
 function sanitizeTags(tags: unknown, ticketType: TeamTicketType, environment?: TeamEnvironment): string[] {
-  const allowed = new Set<string>(TEAM_TAG_SUGGESTIONS);
   const result = new Set<string>(["tareas"]);
 
   if (Array.isArray(tags)) {
     for (const tag of tags) {
-      if (typeof tag === "string" && tag.trim() && allowed.has(tag.trim())) {
-        result.add(tag.trim());
+      if (typeof tag === "string") {
+        const trimmed = tag.trim().slice(0, 100);
+        if (trimmed) result.add(trimmed);
       }
     }
   }
