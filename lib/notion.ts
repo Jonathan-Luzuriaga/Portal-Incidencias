@@ -16,6 +16,7 @@ import {
 import { resolveCurrentSprintId } from "./notion-sprint";
 import { getNotionTags } from "./project-profiles";
 import { getPmAssigneeIds } from "./propuesta-config";
+import { resolveTeamProjectRelationId } from "./team-project-relations";
 import { getTeamNotionProps } from "./team-notion-config";
 import { FormattedIncident, ServiceError } from "./types";
 
@@ -46,7 +47,9 @@ export async function createIncidentPage(args: CreateIncidentArgs): Promise<Crea
     [props.description]: notionRichText(formatted.shortDescription),
     [props.priority]: notionSelect(formatted.notionPriority),
     [props.category]: notionMultiSelect(defaults.category),
-    [props.project]: notionRelation([config.projectRelationId]),
+    [props.project]: notionRelation([
+      resolveTeamProjectRelationId(config.projectRelationId),
+    ]),
     [props.client]: notionMultiSelect([defaults.client]),
     [props.clientProject]: notionMultiSelect([clientProject]),
     [props.ticketType]: notionSelect(defaults.ticketType),

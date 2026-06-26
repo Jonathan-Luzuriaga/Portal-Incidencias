@@ -5,6 +5,7 @@ import {
   isCanonicalProjectLabel,
   TEAM_PROJECT_OPTIONS,
 } from "./team-profiles";
+import { getRelationProjectOptionsFallback } from "./team-project-relations";
 import type {
   TeamClientProjectOption,
   TeamParentOption,
@@ -211,6 +212,9 @@ export async function listNotionProjects(): Promise<TeamProjectOption[]> {
       if (mapped.length > 0) return mapped;
     }
 
+    if (mode === "relation") {
+      return getRelationProjectOptionsFallback();
+    }
     return TEAM_PROJECT_OPTIONS;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";

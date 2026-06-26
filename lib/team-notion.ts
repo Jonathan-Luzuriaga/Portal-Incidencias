@@ -19,6 +19,7 @@ import { resolveCurrentSprintId } from "./notion-sprint";
 import { getTeamNotionProps } from "./team-notion-config";
 import { getProjectFieldMode } from "./team-notion-meta";
 import { getDefaultTeamTags, buildTeamBodyMarkdown, resolveTeamProject } from "./team-profiles";
+import { resolveTeamProjectRelationId } from "./team-project-relations";
 import type { TeamTaskFormData } from "./team-types";
 import { ServiceError } from "./types";
 
@@ -56,7 +57,10 @@ export async function createTeamTaskPage(
     form.categories.length > 0 ? form.categories : [form.category].filter(Boolean);
 
   const projectMode = await getProjectFieldMode();
-  const projectValue = resolveTeamProject(form.projectRelationId);
+  let projectValue = resolveTeamProject(form.projectRelationId);
+  if (projectMode === "relation") {
+    projectValue = resolveTeamProjectRelationId(projectValue);
+  }
 
   const properties: Record<string, unknown> = {
     [props.title]: notionTitle(form.title),

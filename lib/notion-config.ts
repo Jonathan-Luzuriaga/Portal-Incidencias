@@ -1,6 +1,7 @@
 import { ServiceError } from "./types";
 import { parseCsvValues } from "./notion-properties";
 import { parseDatePropertyNames } from "./dates";
+import { isNotionPageId } from "./team-project-relations";
 
 /** Configuración de properties y valores por defecto de la base de datos Notion. */
 export interface NotionConfig {
@@ -40,10 +41,16 @@ export function getNotionConfig(): NotionConfig {
   const tagsRaw = process.env.NOTION_DEFAULT_TAGS ?? "tareas,bugs,qa,Frontend,UX/UI,Incidencias";
   const categoryRaw = process.env.NOTION_DEFAULT_CATEGORY ?? "BUG,Frontend";
 
-  const projectRelationId = process.env.NOTION_PROJECT_RELATION_ID;
+  const projectRelationId = process.env.NOTION_PROJECT_RELATION_ID?.trim();
   if (!projectRelationId) {
     throw new ServiceError(
       "Falta NOTION_PROJECT_RELATION_ID (page id del proyecto Bago en la columna Proyecto).",
+      500
+    );
+  }
+  if (!isNotionPageId(projectRelationId)) {
+    throw new ServiceError(
+      `NOTION_PROJECT_RELATION_ID debe ser el UUID de la página del proyecto Bago en Notion, no el texto "${projectRelationId}".`,
       500
     );
   }
