@@ -122,7 +122,8 @@ export async function createTeamTaskPage(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     throw new ServiceError(
-      `No se pudo crear la tarea en Notion. Verifica la integración y los nombres de las properties. Detalle: ${message}`,
+      `No se pudo crear la tarea en Notion. Verifica la integración y los nombres de las properties. ` +
+        `Columna tipo: "${props.ticketType}". Detalle: ${message}`,
       502
     );
   }

@@ -3,6 +3,11 @@ import { parseCsvValues } from "./notion-properties";
 import { parseDatePropertyNames } from "./dates";
 import { isNotionPageId } from "./team-project-relations";
 
+function envProp(name: string, fallback: string): string {
+  const value = process.env[name]?.trim();
+  return value || fallback;
+}
+
 /** Configuración de properties y valores por defecto de la base de datos Notion. */
 export interface NotionConfig {
   databaseId: string;
@@ -59,17 +64,17 @@ export function getNotionConfig(): NotionConfig {
     databaseId,
     projectRelationId,
     props: {
-      title: process.env.NOTION_PROP_TITLE ?? "herramienta",
-      description: process.env.NOTION_PROP_DESCRIPTION ?? "Descripción",
-      priority: process.env.NOTION_PROP_PRIORITY ?? "Prioridad",
-      category: process.env.NOTION_PROP_CATEGORY ?? "Categoria",
-      project: process.env.NOTION_PROP_PROJECT ?? "Proyecto",
-      tags: process.env.NOTION_PROP_TAGS ?? "Etiquetas",
-      client: process.env.NOTION_PROP_CLIENT ?? "Cliente",
-      clientProject: process.env.NOTION_PROP_CLIENT_PROJECT ?? "Proyecto Cliente",
-      ticketType: process.env.NOTION_PROP_TICKET_TYPE ?? "Tipo",
-      status: process.env.NOTION_PROP_STATUS ?? "Estado",
-      sprint: process.env.NOTION_PROP_SPRINT ?? "Sprint",
+      title: envProp("NOTION_PROP_TITLE", "herramienta"),
+      description: envProp("NOTION_PROP_DESCRIPTION", "Descripción"),
+      priority: envProp("NOTION_PROP_PRIORITY", "Prioridad"),
+      category: envProp("NOTION_PROP_CATEGORY", "Categoria"),
+      project: envProp("NOTION_PROP_PROJECT", "Proyecto"),
+      tags: envProp("NOTION_PROP_TAGS", "Etiquetas"),
+      client: envProp("NOTION_PROP_CLIENT", "Cliente"),
+      clientProject: envProp("NOTION_PROP_CLIENT_PROJECT", "Proyecto Cliente"),
+      ticketType: envProp("NOTION_PROP_TICKET_TYPE", "Tipo"),
+      status: envProp("NOTION_PROP_STATUS", "Estado"),
+      sprint: envProp("NOTION_PROP_SPRINT", "Sprint"),
     },
     datePropertyNames: parseDatePropertyNames(process.env.NOTION_DATE_PROPERTIES),
     defaults: {

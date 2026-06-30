@@ -147,6 +147,12 @@ export interface TeamOptionsApiSuccess {
   clientProjects: TeamClientProjectOption[];
   parents: TeamParentOption[];
   tagSuggestions: string[];
+  /** Nombres de columnas Notion que usa el servidor (para verificar env en Vercel). */
+  notionPropNames: {
+    ticketType: string;
+    assignee: string;
+    parent: string;
+  };
 }
 
 export interface TeamOptionsApiError {

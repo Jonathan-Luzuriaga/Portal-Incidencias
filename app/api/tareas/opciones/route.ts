@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getNotionConfig } from "@/lib/notion-config";
+import { getTeamNotionProps } from "@/lib/team-notion-config";
 import {
   getProjectFieldMode,
   listClientProjectOptions,
@@ -49,6 +51,11 @@ export async function GET(): Promise<NextResponse<TeamOptionsApiResponse>> {
       clientProjects: clientProjectsR.status === "fulfilled" ? clientProjectsR.value : [],
       parents: parentsR.status === "fulfilled" ? parentsR.value : [],
       tagSuggestions: tagsR.status === "fulfilled" ? tagsR.value : [],
+      notionPropNames: {
+        ticketType: getNotionConfig().props.ticketType,
+        assignee: getTeamNotionProps().assignee,
+        parent: getTeamNotionProps().parent,
+      },
     });
   } catch (err) {
     if (err instanceof ServiceError) {
