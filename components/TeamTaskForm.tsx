@@ -319,6 +319,7 @@ export default function TeamTaskForm() {
 
       setAiPrepared(true);
       setShowPreview(true);
+      setShowAdvanced(true);
       setStatus("idle");
     } catch {
       setErrorMsg("No se pudo preparar con IA. Revisa tu conexión e inténtalo de nuevo.");
@@ -462,6 +463,8 @@ export default function TeamTaskForm() {
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
       noValidate
     >
+      <input type="hidden" name="priority" value={priority} />
+      <input type="hidden" name="category" value={category} />
       {/* Tipo primero */}
       <div className={sectionClasses}>
         <SectionTitle>Tipo de ticket</SectionTitle>
@@ -932,7 +935,6 @@ export default function TeamTaskForm() {
                 <label htmlFor="priority" className={labelClasses}>Prioridad</label>
                 <select
                   id="priority"
-                  name="priority"
                   disabled={busy}
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
@@ -947,7 +949,6 @@ export default function TeamTaskForm() {
                 <label htmlFor="category" className={labelClasses}>Categoría</label>
                 <select
                   id="category"
-                  name="category"
                   disabled={busy}
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}

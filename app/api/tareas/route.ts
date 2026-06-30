@@ -97,8 +97,7 @@ function parseHours(raw: string): number | null {
 
 function parseForm(
   form: FormData,
-  rawInput: string,
-  useAi: boolean
+  rawInput: string
 ): TeamTaskFormData | string {
   const title = String(form.get("title") ?? "").trim();
   const shortDescription = String(form.get("shortDescription") ?? "").trim();
@@ -122,7 +121,6 @@ function parseForm(
   const environment = TEAM_ENVIRONMENTS.includes(environmentRaw) ? environmentRaw : "Desarrollo";
   const scope = TEAM_SCOPES.includes(scopeRaw) ? scopeRaw : "Frontend";
   const categories = scopeToCategories(scope);
-  const willUseAi = useAi || Boolean(rawInput && !title);
 
   if (!rawInput && !title) {
     return "Describe la idea o espera el preview de la IA.";
@@ -131,11 +129,7 @@ function parseForm(
   if (!projectRelationId) return "Selecciona un proyecto.";
   if (!clientProject) return "Selecciona el Proyecto Cliente.";
   if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo válido.";
-  if (!willUseAi && !TEAM_PRIORITIES.includes(priority)) {
-    return "Selecciona una prioridad válida.";
-  }
   if (
-    !willUseAi &&
     category &&
     !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])
   ) {
@@ -184,7 +178,7 @@ export async function POST(request: Request): Promise<NextResponse<TeamTaskApiRe
   const useAi = String(form.get("useAi") ?? "") === "true";
   const projectLabel = String(form.get("projectLabel") ?? "").trim();
 
-  const parsed = parseForm(form, rawInput, useAi);
+  const parsed = parseForm(form, rawInput);
   if (typeof parsed === "string") return bad(parsed);
 
   const files = form
