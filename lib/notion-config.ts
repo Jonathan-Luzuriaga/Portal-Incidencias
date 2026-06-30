@@ -67,7 +67,7 @@ export function getNotionConfig(): NotionConfig {
       tags: process.env.NOTION_PROP_TAGS ?? "Etiquetas",
       client: process.env.NOTION_PROP_CLIENT ?? "Cliente",
       clientProject: process.env.NOTION_PROP_CLIENT_PROJECT ?? "Proyecto Cliente",
-      ticketType: process.env.NOTION_PROP_TICKET_TYPE ?? "Tipo de Ticket",
+      ticketType: process.env.NOTION_PROP_TICKET_TYPE ?? "Tipo",
       status: process.env.NOTION_PROP_STATUS ?? "Estado",
       sprint: process.env.NOTION_PROP_SPRINT ?? "Sprint",
     },
