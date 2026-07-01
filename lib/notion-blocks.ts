@@ -245,6 +245,31 @@ export function markdownToNotionBlocks(markdown: string): BlockObjectRequest[] {
   return blocks.length > 0 ? blocks : [paragraphBlock("(Sin contenido)")];
 }
 
+/** Bloques de imagen con leyenda (estilo documento ZONALES). */
+export function captionedEvidenceImageBlocks(
+  captions: string[],
+  fileUploadIds: string[]
+): BlockObjectRequest[] {
+  if (fileUploadIds.length === 0) return [];
+
+  const blocks: BlockObjectRequest[] = [headingBlock(3, "Evidencias")];
+
+  for (let i = 0; i < fileUploadIds.length; i++) {
+    const caption = captions[i]?.trim() || `Imagen ${i + 1}`;
+    blocks.push(paragraphBlock(`**${caption}**`));
+    blocks.push({
+      object: "block",
+      type: "image",
+      image: {
+        type: "file_upload",
+        file_upload: { id: fileUploadIds[i] },
+      },
+    });
+  }
+
+  return blocks;
+}
+
 /** Bloques de imagen usando file_upload IDs de Notion. */
 export function evidenceImageBlocks(fileUploadIds: string[]): BlockObjectRequest[] {
   if (fileUploadIds.length === 0) return [];

@@ -1,4 +1,4 @@
-import type { CreatePageResponse } from "@notionhq/client/build/src/api-endpoints";
+import type { CreatePageResponse, BlockObjectRequest } from "@notionhq/client/build/src/api-endpoints";
 import { todayIsoDate } from "./dates";
 import { getNotionClient } from "./notion-client";
 import { getNotionConfig } from "./notion-config";
@@ -29,7 +29,9 @@ interface CreateTicketParentArgs {
   taskTitle: string;
   shortDescription: string;
   notionPriority: string;
-  bodyMarkdown: string;
+  bodyMarkdown?: string;
+  /** Si se provee, reemplaza el armado desde bodyMarkdown + imageUploadIds. */
+  prebuiltBodyBlocks?: BlockObjectRequest[];
   imageUploadIds: string[];
   documentUploadIds: string[];
   clientProject: string;
@@ -48,7 +50,8 @@ export async function createTicketParentPage(
     taskTitle,
     shortDescription,
     notionPriority,
-    bodyMarkdown,
+    bodyMarkdown = "",
+    prebuiltBodyBlocks,
     imageUploadIds,
     documentUploadIds,
     clientProject,
@@ -56,11 +59,13 @@ export async function createTicketParentPage(
   const { props, defaults } = config;
   const today = todayIsoDate();
 
-  const bodyBlocks = [
-    ...markdownToNotionBlocks(bodyMarkdown),
-    ...evidenceImageBlocks(imageUploadIds),
-    ...documentFileBlocks(documentUploadIds),
-  ];
+  const bodyBlocks =
+    prebuiltBodyBlocks ??
+    [
+      ...markdownToNotionBlocks(bodyMarkdown),
+      ...evidenceImageBlocks(imageUploadIds),
+      ...documentFileBlocks(documentUploadIds),
+    ];
 
   const properties: Record<string, unknown> = {
     [props.title]: notionTitle(taskTitle),

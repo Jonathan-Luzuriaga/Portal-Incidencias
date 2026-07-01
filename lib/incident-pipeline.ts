@@ -1,8 +1,9 @@
+import { buildDocumentParentNotionBlocks } from "./document-parent-blocks";
+import { parseDocumentIncidents } from "./document-transcription";
 import { generateDocumentTicketSummary } from "./deepseek-document-summary";
 import { generateIncidentSubtasks } from "./deepseek-incident-subtasks";
 import {
   buildDocumentTicketTitle,
-  buildLiteralDocumentParentBody,
   buildLiteralIncidentBody,
   buildLiteralIncidentSubtaskBody,
   buildTicketTitle,
@@ -154,8 +155,14 @@ export async function processAndCreateDocumentTicket(
 
   const taskTitle = buildDocumentTicketTitle(docFile.name);
   const parentPriority = mapFormPriorityToNotion(highestIncidentPriority(incidents));
-  const literalBody = buildLiteralDocumentParentBody(documentText, aiSummary, docFile.name);
   const shortDescription = aiSummary.slice(0, 200);
+
+  const parsedSections = parseDocumentIncidents(documentText);
+  const imagesByIncidentUploadIds: string[][] = [];
+  for (let i = 0; i < incidents.length; i++) {
+    const ids = await uploadEvidenceImages(imagesByIncident[i] ?? []);
+    imagesByIncidentUploadIds.push(ids);
+  }
 
   const documentUploadIds: string[] = [];
   if (docFile.size > 0) {
@@ -163,13 +170,25 @@ export async function processAndCreateDocumentTicket(
     documentUploadIds.push(docId);
   }
 
+  const parentBodyBlocks = buildDocumentParentNotionBlocks({
+    aiSummary,
+    documentText,
+    fileName: docFile.name,
+    sections: parsedSections.map((section, index) => ({
+      number: section.number,
+      imageUploadIds: imagesByIncidentUploadIds[index] ?? [],
+      evidenceCaptions: section.evidenceCaptions,
+    })),
+    documentUploadIds,
+  });
+
   const parentPage = await createTicketParentPage({
     taskTitle,
     shortDescription,
     notionPriority: parentPriority,
-    bodyMarkdown: literalBody,
+    prebuiltBodyBlocks: parentBodyBlocks,
     imageUploadIds: [],
-    documentUploadIds,
+    documentUploadIds: [],
     clientProject,
   });
 
