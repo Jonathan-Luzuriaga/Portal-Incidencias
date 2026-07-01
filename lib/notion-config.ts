@@ -72,7 +72,9 @@ export function getNotionConfig(): NotionConfig {
       tags: envProp("NOTION_PROP_TAGS", "Etiquetas"),
       client: envProp("NOTION_PROP_CLIENT", "Cliente"),
       clientProject: envProp("NOTION_PROP_CLIENT_PROJECT", "Proyecto Cliente"),
-      ticketType: envProp("NOTION_PROP_TICKET_TYPE", "Tipo"),
+      // Forzado a "Tipo": el nombre real de la columna en Notion. Se ignora
+      // NOTION_PROP_TICKET_TYPE para evitar overrides erróneos en el entorno.
+      ticketType: "Tipo",
       status: envProp("NOTION_PROP_STATUS", "Estado"),
       sprint: envProp("NOTION_PROP_SPRINT", "Sprint"),
     },
