@@ -467,7 +467,7 @@ export default function TeamTaskForm() {
       <input type="hidden" name="category" value={category} />
       {/* Tipo primero */}
       <div className={sectionClasses}>
-        <SectionTitle>Tipo de ticket</SectionTitle>
+        <SectionTitle>Tipo</SectionTitle>
         <div className="flex gap-2">
           {TICKET_TYPES.map((type) => (
             <button
