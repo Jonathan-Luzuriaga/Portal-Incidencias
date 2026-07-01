@@ -6,6 +6,7 @@ import type { CreatedIncidentSummary, IncidentApiResponse } from "@/lib/types";
 import { DEFAULT_CLIENT_PROJECT, resolveClientProject } from "@/lib/project-profiles";
 import { ClientProjectSelect } from "./ClientProjectSelect";
 import { EvidenceInput } from "./EvidenceInput";
+import { RequiredLegend, RequiredMark } from "./RequiredMark";
 import { SuccessPanel } from "./SuccessPanel";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -140,6 +141,8 @@ export default function IncidentForm() {
     >
       <input type="hidden" name="dateTime" value={dateTime} />
 
+      <RequiredLegend />
+
       {/* --- Datos generales --- */}
       <div className={sectionClasses}>
         <SectionTitle>Datos generales</SectionTitle>
@@ -151,7 +154,7 @@ export default function IncidentForm() {
         />
 
         <div>
-          <label htmlFor="title" className={labelClasses}>Título</label>
+          <label htmlFor="title" className={labelClasses}>Título<RequiredMark /></label>
           <input
             id="title"
             name="title"
@@ -165,7 +168,7 @@ export default function IncidentForm() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="priority" className={labelClasses}>Prioridad</label>
+            <label htmlFor="priority" className={labelClasses}>Prioridad<RequiredMark /></label>
             <select id="priority" name="priority" required disabled={loading} className={fieldClasses} defaultValue="Medio">
               {PRIORITY_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -173,7 +176,7 @@ export default function IncidentForm() {
             </select>
           </div>
           <div>
-            <label htmlFor="environment" className={labelClasses}>Ambiente</label>
+            <label htmlFor="environment" className={labelClasses}>Ambiente<RequiredMark /></label>
             <select id="environment" name="environment" required disabled={loading} className={fieldClasses} defaultValue="LATEST">
               {ENVIRONMENT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -183,7 +186,7 @@ export default function IncidentForm() {
         </div>
 
         <div>
-          <label htmlFor="justification" className={labelClasses}>Justificación / descripción</label>
+          <label htmlFor="justification" className={labelClasses}>Justificación / descripción<RequiredMark /></label>
           <textarea
             id="justification"
             name="justification"
@@ -196,7 +199,7 @@ export default function IncidentForm() {
         </div>
 
         <div>
-          <label htmlFor="summary" className={labelClasses}>Resumen</label>
+          <label htmlFor="summary" className={labelClasses}>Resumen<RequiredMark /></label>
           <input
             id="summary"
             name="summary"
@@ -215,7 +218,7 @@ export default function IncidentForm() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="userRole" className={labelClasses}>Usuario / rol</label>
+            <label htmlFor="userRole" className={labelClasses}>Usuario / rol<RequiredMark /></label>
             <input
               id="userRole"
               name="userRole"
@@ -238,7 +241,7 @@ export default function IncidentForm() {
         </div>
 
         <div>
-          <label htmlFor="moduleUrl" className={labelClasses}>Módulo / URL</label>
+          <label htmlFor="moduleUrl" className={labelClasses}>Módulo / URL<RequiredMark /></label>
           <input
             id="moduleUrl"
             name="moduleUrl"
@@ -252,7 +255,7 @@ export default function IncidentForm() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="browserDevice" className={labelClasses}>Navegador / dispositivo</label>
+            <label htmlFor="browserDevice" className={labelClasses}>Navegador / dispositivo<RequiredMark /></label>
             <input
               id="browserDevice"
               name="browserDevice"
@@ -264,7 +267,7 @@ export default function IncidentForm() {
             />
           </div>
           <div>
-            <label htmlFor="affectedRecordId" className={labelClasses}>ID / registro afectado</label>
+            <label htmlFor="affectedRecordId" className={labelClasses}>ID / registro afectado<RequiredMark /></label>
             <input
               id="affectedRecordId"
               name="affectedRecordId"
@@ -283,7 +286,7 @@ export default function IncidentForm() {
         <SectionTitle>Detalle del bug</SectionTitle>
 
         <div>
-          <label htmlFor="actualResult" className={labelClasses}>Resultado actual (pasos)</label>
+          <label htmlFor="actualResult" className={labelClasses}>Resultado actual (pasos)<RequiredMark /></label>
           <textarea
             id="actualResult"
             name="actualResult"
@@ -296,7 +299,7 @@ export default function IncidentForm() {
         </div>
 
         <div>
-          <label htmlFor="expectedResult" className={labelClasses}>Resultado esperado</label>
+          <label htmlFor="expectedResult" className={labelClasses}>Resultado esperado<RequiredMark /></label>
           <textarea
             id="expectedResult"
             name="expectedResult"

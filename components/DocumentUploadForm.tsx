@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { CreatedIncidentSummary, IncidentApiResponse } from "@/lib/types";
 import { DEFAULT_CLIENT_PROJECT, resolveClientProject } from "@/lib/project-profiles";
 import { ClientProjectSelect } from "./ClientProjectSelect";
+import { RequiredLegend, RequiredMark } from "./RequiredMark";
 import { SuccessPanel } from "./SuccessPanel";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -102,6 +103,8 @@ export default function DocumentUploadForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
     >
+      <RequiredLegend />
+
       <ClientProjectSelect
         id="clientProjectDoc"
         value={clientProject}
@@ -111,7 +114,7 @@ export default function DocumentUploadForm() {
       />
 
       <div>
-        <label htmlFor="document" className={labelClasses}>Reporte (PDF o DOCX)</label>
+        <label htmlFor="document" className={labelClasses}>Reporte (PDF o DOCX)<RequiredMark /></label>
         <input
           id="document"
           name="document"

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PropuestaApiResponse } from "@/app/api/propuestas/route";
 import { DocumentDropInput } from "@/components/DocumentDropInput";
+import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
 import { DEFAULT_PM_ASSIGNEE_IDS } from "@/lib/propuesta-defaults";
 import type { TeamOptionsApiResponse, TeamUserOption } from "@/lib/team-types";
 import { TEAM_PRIORITIES } from "@/lib/team-types";
@@ -167,6 +168,8 @@ export default function ProposalUploadForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
     >
+      <RequiredLegend />
+
       <DocumentDropInput
         disabled={loading}
         label="Propuesta (PDF o DOCX)"
@@ -191,7 +194,7 @@ export default function ProposalUploadForm() {
       </div>
 
       <div>
-        <span className={labelClasses}>Responsables</span>
+        <span className={labelClasses}>Responsables<RequiredMark /></span>
         {loadingUsers ? (
           <p className="text-sm text-[#9b9a97]">Cargando equipo…</p>
         ) : (

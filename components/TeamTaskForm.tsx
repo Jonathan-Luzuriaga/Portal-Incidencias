@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { EvidenceInput } from "./EvidenceInput";
+import { RequiredLegend, RequiredMark } from "./RequiredMark";
 import { SuccessPanel } from "./SuccessPanel";
 import {
   DEFAULT_TEAM_CLIENT_PROJECT,
@@ -465,6 +466,9 @@ export default function TeamTaskForm() {
     >
       <input type="hidden" name="priority" value={priority} />
       <input type="hidden" name="category" value={category} />
+
+      <RequiredLegend />
+
       {/* Tipo primero */}
       <div className={sectionClasses}>
         <SectionTitle>Tipo</SectionTitle>
@@ -497,7 +501,7 @@ export default function TeamTaskForm() {
         <SectionTitle>Ingesta</SectionTitle>
 
         <div>
-          <label htmlFor="rawInput" className={labelClasses}>Tu idea</label>
+          <label htmlFor="rawInput" className={labelClasses}>Tu idea<RequiredMark /></label>
           <textarea
             id="rawInput"
             name="rawInput"
@@ -517,7 +521,7 @@ export default function TeamTaskForm() {
         <EvidenceInput disabled={busy} onChange={setEvidenceFiles} />
 
         <div>
-          <label htmlFor="projectRelationId" className={labelClasses}>Proyecto</label>
+          <label htmlFor="projectRelationId" className={labelClasses}>Proyecto<RequiredMark /></label>
           <select
             id="projectRelationId"
             name="projectRelationId"
@@ -540,7 +544,7 @@ export default function TeamTaskForm() {
         </div>
 
         <div>
-          <label htmlFor="clientProject" className={labelClasses}>Proyecto Cliente</label>
+          <label htmlFor="clientProject" className={labelClasses}>Proyecto Cliente<RequiredMark /></label>
           <select
             id="clientProject"
             name="clientProject"
@@ -602,7 +606,7 @@ export default function TeamTaskForm() {
         </div>
 
         <div>
-          <span className={labelClasses}>Responsables</span>
+          <span className={labelClasses}>Responsables<RequiredMark /></span>
           {loadingOptions ? (
             <p className="text-sm text-[#9b9a97]">Cargando equipo…</p>
           ) : (
@@ -873,7 +877,7 @@ export default function TeamTaskForm() {
           {showPreview && (
             <div className="space-y-3">
               <div>
-                <label htmlFor="title" className={labelClasses}>Título</label>
+                <label htmlFor="title" className={labelClasses}>Título<RequiredMark /></label>
                 <input
                   id="title"
                   name="title"

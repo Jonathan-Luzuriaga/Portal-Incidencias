@@ -4,6 +4,7 @@ import {
   BAGO_CLIENT_PROJECT_OPTIONS,
   type ClientProjectOption,
 } from "@/lib/project-profiles";
+import { RequiredMark } from "./RequiredMark";
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
@@ -36,6 +37,7 @@ export function ClientProjectSelect({
     <div>
       <label htmlFor={id} className={labelClasses}>
         Proyecto Cliente
+        <RequiredMark />
       </label>
       <select
         id={id}

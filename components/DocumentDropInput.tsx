@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId, useRef, useState } from "react";
+import { RequiredMark } from "./RequiredMark";
 
 const ACCEPT =
   ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -80,6 +81,7 @@ export function DocumentDropInput({
     <div>
       <label htmlFor={inputId} className={labelClasses}>
         {label}
+        <RequiredMark />
       </label>
 
       <div
