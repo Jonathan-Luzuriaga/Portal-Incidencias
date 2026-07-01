@@ -74,7 +74,7 @@ export function EvidenceInput({ disabled, onChange }: EvidenceInputProps) {
   return (
     <div>
       <label htmlFor={inputId} className={labelClasses}>
-        Imágenes <span className="font-normal text-[#9b9a97]">(opcional, máx. {MAX_IMAGES})</span>
+        Imágenes <span className="font-normal text-[#9b9a97]">(recomendadas, máx. {MAX_IMAGES})</span>
       </label>
 
       <div
