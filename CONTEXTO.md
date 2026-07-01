@@ -156,7 +156,7 @@ Base de datos compartida por ambos portales. Nombres de columna **exactos** (con
 | `NOTION_PROP_PROJECT` | `Proyecto` | relation |
 | `NOTION_PROP_CLIENT` | `Cliente` | multi_select |
 | `NOTION_PROP_CLIENT_PROJECT` | `Proyecto Cliente` | multi_select |
-| `NOTION_PROP_TICKET_TYPE` | `Tipo de Ticket` | select (Épica, Tarea, Bug) |
+| `NOTION_PROP_TICKET_TYPE` | `Tipo` | select (Épica, Tarea, Bug) |
 | `NOTION_PROP_STATUS` | `Estado` | status → **Sin empezar** |
 | `NOTION_PROP_TAGS` | `Etiquetas` | multi_select |
 | `NOTION_PROP_SPRINT` | `Sprint` | relation |

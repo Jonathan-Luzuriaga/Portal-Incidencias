@@ -33,7 +33,7 @@ cp .env.example .env.local
    - **Prioridad** (select): Alta, Media, Baja
    - **Categoria** (select): BUG Frontend (o el valor en `NOTION_DEFAULT_CATEGORY`)
    - **Etiquetas** (multi_select): Frontend, UX/UI, bugs, qa, sgc, tareas
-   - **Cliente**, **Proyecto**, **Tipo de Ticket**, **Estado**, **Descripción**
+   - **Cliente**, **Proyecto**, **Tipo**, **Estado**, **Descripción**
 
 ## Desarrollo
 
