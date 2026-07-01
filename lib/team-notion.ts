@@ -3,6 +3,7 @@ import { todayIsoDate } from "./dates";
 import { getNotionClient } from "./notion-client";
 import { getNotionConfig } from "./notion-config";
 import { markdownToNotionBlocks, evidenceImageBlocks } from "./notion-blocks";
+import { appendNotionChildren, splitNotionChildren } from "./notion-page-children";
 import {
   notionDate,
   notionMultiSelect,
@@ -117,12 +118,17 @@ export async function createTeamTaskPage(
     properties[props.sprint] = notionRelation([sprintId]);
   }
 
+  const { initial, remainder } = splitNotionChildren(bodyBlocks);
+
   try {
-    return await notion.pages.create({
+    const page = await notion.pages.create({
       parent: { database_id: config.databaseId },
       properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
-      children: bodyBlocks.length > 0 ? bodyBlocks : undefined,
+      children: initial.length > 0 ? initial : undefined,
     });
+
+    await appendNotionChildren(page.id, remainder);
+    return page;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     throw new ServiceError(

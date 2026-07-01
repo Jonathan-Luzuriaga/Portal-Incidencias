@@ -21,6 +21,7 @@ import { resolveCurrentSprintId } from "./notion-sprint";
 import { getNotionTags } from "./project-profiles";
 import { getPmAssigneeIds } from "./propuesta-config";
 import { resolveTeamProjectRelationId } from "./team-project-relations";
+import { appendNotionChildren, splitNotionChildren } from "./notion-page-children";
 import { getTeamNotionProps } from "./team-notion-config";
 import { ServiceError } from "./types";
 
@@ -90,12 +91,17 @@ export async function createTicketParentPage(
     properties[getTeamNotionProps().assignee] = notionPeople(assigneeIds);
   }
 
+  const { initial, remainder } = splitNotionChildren(bodyBlocks);
+
   try {
-    return await notion.pages.create({
+    const page = await notion.pages.create({
       parent: { database_id: config.databaseId },
       properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
-      children: bodyBlocks,
+      children: initial.length > 0 ? initial : undefined,
     });
+
+    await appendNotionChildren(page.id, remainder);
+    return page;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     const ticketType = config.incidentTicketType;

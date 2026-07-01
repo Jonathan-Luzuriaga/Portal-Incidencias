@@ -36,11 +36,12 @@ export async function POST(request: Request): Promise<NextResponse<IncidentApiRe
     const { imagesByIncident } = await extractDocumentContent(docFile, incidents.length);
 
     const created = [];
+    const includeFullDocumentText = incidents.length === 1;
     for (let i = 0; i < incidents.length; i++) {
       const images = (imagesByIncident[i] ?? []).map(documentImageToFile);
       const result = await processAndCreateIncident(incidents[i], images, {
         documentFile: docFile,
-        documentSectionText: text,
+        documentSectionText: includeFullDocumentText ? text : undefined,
       });
       created.push({
         pageId: result.pageId,
