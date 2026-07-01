@@ -767,6 +767,8 @@ export default function TeamTaskForm() {
                     </button>
                   </div>
                   <textarea
+                    id={`additionalTask_${task.id}`}
+                    name={`additionalTask_${task.id}`}
                     value={task.rawInput}
                     disabled={busy}
                     onChange={(e) => updateAdditionalTask(task.id, e.target.value)}
@@ -811,6 +813,8 @@ export default function TeamTaskForm() {
               {subtasks.map((sub, index) => (
                 <li key={index} className="flex items-start gap-2 rounded-md border border-[#efefef] p-2">
                   <input
+                    id={`subtaskEnabled_${index}`}
+                    name={`subtaskEnabled_${index}`}
                     type="checkbox"
                     checked={sub.enabled}
                     disabled={busy}
@@ -819,7 +823,10 @@ export default function TeamTaskForm() {
                   />
                   <div className="min-w-0 flex-1 space-y-1">
                     <input
+                      id={`subtaskTitle_${index}`}
+                      name={`subtaskTitle_${index}`}
                       type="text"
+                      autoComplete="off"
                       value={sub.title}
                       disabled={busy}
                       onChange={(e) => updateSubtask(index, { title: e.target.value })}
@@ -991,7 +998,10 @@ export default function TeamTaskForm() {
               </div>
               <div className="mt-2 flex gap-2">
                 <input
+                  id="customTag"
+                  name="customTag"
                   type="text"
+                  autoComplete="off"
                   value={customTagInput}
                   onChange={(e) => setCustomTagInput(e.target.value)}
                   onKeyDown={(e) => {

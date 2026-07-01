@@ -2,7 +2,7 @@ import { getNotionClient } from "./notion-client";
 import { getNotionConfig } from "./notion-config";
 import { getTeamNotionProps } from "./team-notion-config";
 import {
-  isCanonicalProjectLabel,
+  isExcludedProjectLabel,
   TEAM_PROJECT_OPTIONS,
 } from "./team-profiles";
 import { getRelationProjectOptionsFallback } from "./team-project-relations";
@@ -154,12 +154,12 @@ export async function getProjectFieldMode(): Promise<TeamProjectFieldMode> {
   return cachedProjectFieldMode;
 }
 
-function mapCanonicalProjects(
+function mapProjectOptions(
   entries: Array<{ value: string; label: string }>
 ): TeamProjectOption[] {
   const byLabel = new Map<string, TeamProjectOption>();
   for (const entry of entries) {
-    if (!isCanonicalProjectLabel(entry.label)) continue;
+    if (isExcludedProjectLabel(entry.label)) continue;
     const key = entry.label.trim().toLowerCase();
     if (!byLabel.has(key)) {
       byLabel.set(key, { relationId: entry.value, label: entry.label.trim() });
@@ -180,7 +180,7 @@ export async function listNotionProjects(): Promise<TeamProjectOption[]> {
 
     if (mode === "select" || mode === "multi_select") {
       const options = prop?.[mode]?.options ?? [];
-      const mapped = mapCanonicalProjects(
+      const mapped = mapProjectOptions(
         options.map((o) => ({ value: o.name, label: o.name }))
       );
       if (mapped.length > 0) return mapped;
@@ -208,7 +208,7 @@ export async function listNotionProjects(): Promise<TeamProjectOption[]> {
         entries.push({ value: page.id, label });
       }
 
-      const mapped = mapCanonicalProjects(entries);
+      const mapped = mapProjectOptions(entries);
       if (mapped.length > 0) return mapped;
     }
 

@@ -57,9 +57,13 @@ export async function createTeamTaskPage(
     form.categories.length > 0 ? form.categories : [form.category].filter(Boolean);
 
   const projectMode = await getProjectFieldMode();
-  let projectValue = resolveTeamProject(form.projectRelationId);
+  let projectValue: string;
   if (projectMode === "relation") {
-    projectValue = resolveTeamProjectRelationId(projectValue);
+    // En modo relation el formulario envía el UUID de la página del proyecto.
+    // Debe resolverse directamente (resolveTeamProject lo colapsaría a Bago).
+    projectValue = resolveTeamProjectRelationId(form.projectRelationId);
+  } else {
+    projectValue = resolveTeamProject(form.projectRelationId);
   }
 
   const properties: Record<string, unknown> = {
