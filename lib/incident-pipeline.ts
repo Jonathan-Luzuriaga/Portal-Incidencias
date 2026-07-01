@@ -1,7 +1,12 @@
+import { generateDocumentTicketSummary } from "./deepseek-document-summary";
 import { generateIncidentSubtasks } from "./deepseek-incident-subtasks";
 import {
+  buildDocumentTicketTitle,
+  buildLiteralDocumentParentBody,
   buildLiteralIncidentBody,
+  buildLiteralIncidentSubtaskBody,
   buildTicketTitle,
+  highestIncidentPriority,
   mapFormPriorityToNotion,
 } from "./incident-literal";
 import { createTicketParentPage } from "./notion";
@@ -12,6 +17,7 @@ import type { TeamPriority, TeamTaskFormData } from "./team-types";
 import { getNotionConfig } from "./notion-config";
 import { getNotionTags } from "./project-profiles";
 import type { IncidentFormData } from "./types";
+import { ServiceError } from "./types";
 
 export interface CreatedIncidentSubtask {
   pageId: string;
@@ -53,16 +59,18 @@ function buildSubtaskForm(
     environment: string;
     parentTaskId: string;
     tags: string[];
-  },
-  sub: { title: string; shortDescription: string; bodyMarkdown: string }
+    title: string;
+    shortDescription: string;
+    bodyMarkdown: string;
+  }
 ): TeamTaskFormData {
   const config = getNotionConfig();
   const teamEnvironment = mapIncidentEnvironment(base.environment);
-  const bodyMarkdown = buildTeamBodyMarkdown(sub.bodyMarkdown, teamEnvironment, "Fullstack");
+  const bodyMarkdown = buildTeamBodyMarkdown(base.bodyMarkdown, teamEnvironment, "Fullstack");
 
   return {
-    title: sub.title.trim(),
-    shortDescription: (sub.shortDescription || sub.title).trim().slice(0, 200),
+    title: base.title.trim(),
+    shortDescription: base.shortDescription.trim().slice(0, 200),
     bodyMarkdown,
     ticketType: "Tarea",
     priority: mapNotionPriorityToTeam(base.notionPriority),
@@ -84,7 +92,109 @@ function buildSubtaskForm(
   };
 }
 
-/** Pipeline: transcripción literal → ticket padre → subtareas IA → Notion. */
+async function createIncidentSubtasks(
+  parentPageId: string,
+  clientProject: string,
+  subtaskDefs: Array<{
+    title: string;
+    shortDescription: string;
+    bodyMarkdown: string;
+    notionPriority: string;
+    environment: string;
+    imageFiles: File[];
+  }>
+): Promise<CreatedIncidentSubtask[]> {
+  const tags = getNotionTags(clientProject);
+  const createdSubtasks: CreatedIncidentSubtask[] = [];
+
+  for (const sub of subtaskDefs) {
+    const imageUploadIds = await uploadEvidenceImages(sub.imageFiles);
+    const subForm = buildSubtaskForm({
+      clientProject,
+      notionPriority: sub.notionPriority,
+      environment: sub.environment,
+      parentTaskId: parentPageId,
+      tags,
+      title: sub.title,
+      shortDescription: sub.shortDescription,
+      bodyMarkdown: sub.bodyMarkdown,
+    });
+
+    const subPage = await createTeamTaskPage(subForm, imageUploadIds);
+    createdSubtasks.push({
+      pageId: subPage.id,
+      pageUrl: "url" in subPage ? (subPage.url as string) : null,
+      title: subForm.title,
+    });
+  }
+
+  return createdSubtasks;
+}
+
+/**
+ * Documento completo: un ticket padre (transcripción + resumen IA) y una subtarea por incidencia.
+ */
+export async function processAndCreateDocumentTicket(
+  incidents: IncidentFormData[],
+  imagesByIncident: File[][],
+  docFile: File,
+  documentText: string
+): Promise<CreatedIncident> {
+  if (incidents.length === 0) {
+    throw new ServiceError("No se detectaron incidencias en el documento.", 400);
+  }
+
+  const clientProject = incidents[0].clientProject;
+  const aiSummary = await generateDocumentTicketSummary(
+    documentText,
+    incidents.length,
+    clientProject,
+    docFile.name
+  );
+
+  const taskTitle = buildDocumentTicketTitle(docFile.name);
+  const parentPriority = mapFormPriorityToNotion(highestIncidentPriority(incidents));
+  const literalBody = buildLiteralDocumentParentBody(documentText, aiSummary, docFile.name);
+  const shortDescription = aiSummary.slice(0, 200);
+
+  const documentUploadIds: string[] = [];
+  if (docFile.size > 0) {
+    const docId = await uploadFileToNotion(docFile);
+    documentUploadIds.push(docId);
+  }
+
+  const parentPage = await createTicketParentPage({
+    taskTitle,
+    shortDescription,
+    notionPriority: parentPriority,
+    bodyMarkdown: literalBody,
+    imageUploadIds: [],
+    documentUploadIds,
+    clientProject,
+  });
+
+  const subtaskDefs = incidents.map((incident, index) => ({
+    title: incident.title.trim() || `Incidencia ${String(index + 1).padStart(3, "0")}`,
+    shortDescription: (incident.summary || incident.justification || incident.title).trim().slice(0, 200),
+    bodyMarkdown: buildLiteralIncidentSubtaskBody(incident, index),
+    notionPriority: mapFormPriorityToNotion(incident.priority),
+    environment: incident.environment,
+    imageFiles: imagesByIncident[index] ?? [],
+  }));
+
+  const createdSubtasks = await createIncidentSubtasks(parentPage.id, clientProject, subtaskDefs);
+  const evidenceCount = imagesByIncident.reduce((sum, imgs) => sum + imgs.length, 0);
+
+  return {
+    pageId: parentPage.id,
+    pageUrl: "url" in parentPage ? (parentPage.url as string) : null,
+    taskTitle,
+    evidenceCount,
+    subtasks: createdSubtasks,
+  };
+}
+
+/** Formulario manual: ticket padre + subtareas sugeridas por IA (flujo de una incidencia). */
 export async function processAndCreateIncident(
   form: IncidentFormData,
   imageFiles: File[],
@@ -117,32 +227,18 @@ export async function processAndCreateIncident(
   });
 
   const suggestedSubtasks = await generateIncidentSubtasks(literalBody, form.clientProject);
-  const tags = getNotionTags(form.clientProject);
-  const createdSubtasks: CreatedIncidentSubtask[] = [];
-
-  for (const sub of suggestedSubtasks) {
-    const subForm = buildSubtaskForm(
-      {
-        clientProject: form.clientProject,
-        notionPriority,
-        environment: form.environment,
-        parentTaskId: parentPage.id,
-        tags,
-      },
-      {
-        title: sub.title,
-        shortDescription: sub.shortDescription,
-        bodyMarkdown: sub.bodyMarkdown ?? "",
-      }
-    );
-
-    const subPage = await createTeamTaskPage(subForm, []);
-    createdSubtasks.push({
-      pageId: subPage.id,
-      pageUrl: "url" in subPage ? (subPage.url as string) : null,
-      title: subForm.title,
-    });
-  }
+  const createdSubtasks = await createIncidentSubtasks(
+    parentPage.id,
+    form.clientProject,
+    suggestedSubtasks.map((sub) => ({
+      title: sub.title,
+      shortDescription: sub.shortDescription,
+      bodyMarkdown: sub.bodyMarkdown ?? "",
+      notionPriority,
+      environment: form.environment,
+      imageFiles: [],
+    }))
+  );
 
   return {
     pageId: parentPage.id,

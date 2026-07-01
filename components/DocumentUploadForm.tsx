@@ -84,12 +84,15 @@ export default function DocumentUploadForm() {
   }
 
   if (status === "success") {
+    const subCount = created[0]?.subtasks?.length ?? 0;
     return (
       <SuccessPanel
         title={
-          created.length > 1
-            ? `${created.length} incidencias registradas`
-            : "Incidencia registrada"
+          subCount > 1
+            ? `Ticket creado con ${subCount} incidencias`
+            : subCount === 1
+              ? "Ticket creado con 1 incidencia"
+              : "Ticket registrado"
         }
         items={created}
         onReset={resetForm}

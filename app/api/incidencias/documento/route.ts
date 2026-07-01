@@ -5,7 +5,7 @@ import {
   extractDocumentContent,
   extractDocumentText,
 } from "@/lib/document-text";
-import { processAndCreateIncident } from "@/lib/incident-pipeline";
+import { processAndCreateDocumentTicket } from "@/lib/incident-pipeline";
 import { resolveClientProject } from "@/lib/project-profiles";
 import { IncidentApiResponse, ServiceError } from "@/lib/types";
 
@@ -35,34 +35,31 @@ export async function POST(request: Request): Promise<NextResponse<IncidentApiRe
     const incidents = await extractIncidentsFromDocument(text, clientProject);
     const { imagesByIncident } = await extractDocumentContent(docFile, incidents.length);
 
-    const created = [];
-    const includeFullDocumentText = incidents.length === 1;
-    for (let i = 0; i < incidents.length; i++) {
-      const images = (imagesByIncident[i] ?? []).map(documentImageToFile);
-      const result = await processAndCreateIncident(incidents[i], images, {
-        documentFile: docFile,
-        documentSectionText: includeFullDocumentText ? text : undefined,
-      });
-      created.push({
-        pageId: result.pageId,
-        pageUrl: result.pageUrl,
-        taskTitle: result.taskTitle,
-        evidenceCount: result.evidenceCount,
-        subtasks: result.subtasks,
-      });
-    }
+    const imagesByIncidentFiles = imagesByIncident.map((images) =>
+      images.map(documentImageToFile)
+    );
 
-    const first = created[0];
+    const result = await processAndCreateDocumentTicket(
+      incidents,
+      imagesByIncidentFiles,
+      docFile,
+      text
+    );
+
+    const summary = {
+      pageId: result.pageId,
+      pageUrl: result.pageUrl,
+      taskTitle: result.taskTitle,
+      evidenceCount: result.evidenceCount,
+      subtasks: result.subtasks,
+    };
+
     return NextResponse.json<IncidentApiResponse>(
       {
         ok: true,
-        pageId: first.pageId,
-        pageUrl: first.pageUrl,
-        taskTitle: first.taskTitle,
-        evidenceCount: first.evidenceCount,
-        subtasks: first.subtasks,
-        created,
-        total: created.length,
+        ...summary,
+        created: [summary],
+        total: result.subtasks.length,
       },
       { status: 201 }
     );
