@@ -42,9 +42,16 @@ export interface IncidentApiSuccess {
   pageUrl: string | null;
   taskTitle: string;
   evidenceCount: number;
+  subtasks?: CreatedIncidentSubtask[];
   /** Presente cuando se procesa un documento con varias incidencias. */
   created?: CreatedIncidentSummary[];
   total?: number;
+}
+
+export interface CreatedIncidentSubtask {
+  pageId: string;
+  pageUrl: string | null;
+  title: string;
 }
 
 export interface CreatedIncidentSummary {
@@ -52,6 +59,7 @@ export interface CreatedIncidentSummary {
   pageUrl: string | null;
   taskTitle: string;
   evidenceCount: number;
+  subtasks?: CreatedIncidentSubtask[];
 }
 
 export interface IncidentApiError {

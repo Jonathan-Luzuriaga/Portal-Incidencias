@@ -2,7 +2,11 @@ import type { CreatePageResponse } from "@notionhq/client/build/src/api-endpoint
 import { todayIsoDate } from "./dates";
 import { getNotionClient } from "./notion-client";
 import { getNotionConfig } from "./notion-config";
-import { markdownToNotionBlocks, evidenceImageBlocks } from "./notion-blocks";
+import {
+  documentFileBlocks,
+  evidenceImageBlocks,
+  markdownToNotionBlocks,
+} from "./notion-blocks";
 import {
   notionDate,
   notionMultiSelect,
@@ -18,41 +22,56 @@ import { getNotionTags } from "./project-profiles";
 import { getPmAssigneeIds } from "./propuesta-config";
 import { resolveTeamProjectRelationId } from "./team-project-relations";
 import { getTeamNotionProps } from "./team-notion-config";
-import { FormattedIncident, ServiceError } from "./types";
+import { ServiceError } from "./types";
 
-interface CreateIncidentArgs {
-  formatted: FormattedIncident;
-  fileUploadIds: string[];
+interface CreateTicketParentArgs {
+  taskTitle: string;
+  shortDescription: string;
+  notionPriority: string;
+  bodyMarkdown: string;
+  imageUploadIds: string[];
+  documentUploadIds: string[];
   clientProject: string;
 }
 
 /**
- * Crea la tarea en Notion con properties (etiquetas, categoría, cliente, sprint, fechas)
- * y el cuerpo formateado por DeepSeek + evidencias adjuntas.
+ * Crea el ticket padre (tipo Ticket) con transcripción literal,
+ * evidencias y documento adjunto si aplica.
  */
-export async function createIncidentPage(args: CreateIncidentArgs): Promise<CreatePageResponse> {
+export async function createTicketParentPage(
+  args: CreateTicketParentArgs
+): Promise<CreatePageResponse> {
   const config = getNotionConfig();
   const notion = getNotionClient();
-  const { formatted, fileUploadIds, clientProject } = args;
+  const {
+    taskTitle,
+    shortDescription,
+    notionPriority,
+    bodyMarkdown,
+    imageUploadIds,
+    documentUploadIds,
+    clientProject,
+  } = args;
   const { props, defaults } = config;
   const today = todayIsoDate();
 
   const bodyBlocks = [
-    ...markdownToNotionBlocks(formatted.bodyMarkdown),
-    ...evidenceImageBlocks(fileUploadIds),
+    ...markdownToNotionBlocks(bodyMarkdown),
+    ...evidenceImageBlocks(imageUploadIds),
+    ...documentFileBlocks(documentUploadIds),
   ];
 
   const properties: Record<string, unknown> = {
-    [props.title]: notionTitle(formatted.taskTitle),
-    [props.description]: notionRichText(formatted.shortDescription),
-    [props.priority]: notionSelect(formatted.notionPriority),
+    [props.title]: notionTitle(taskTitle),
+    [props.description]: notionRichText(shortDescription),
+    [props.priority]: notionSelect(notionPriority),
     [props.category]: notionMultiSelect(defaults.category),
     [props.project]: notionRelation([
       resolveTeamProjectRelationId(config.projectRelationId),
     ]),
     [props.client]: notionMultiSelect([defaults.client]),
     [props.clientProject]: notionMultiSelect([clientProject]),
-    [props.ticketType]: notionSelect(defaults.ticketType),
+    [props.ticketType]: notionSelect(config.incidentTicketType),
     [props.status]: notionStatus(defaults.status),
     [props.tags]: notionMultiSelect(getNotionTags(clientProject)),
   };
@@ -79,8 +98,9 @@ export async function createIncidentPage(args: CreateIncidentArgs): Promise<Crea
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
+    const ticketType = config.incidentTicketType;
     throw new ServiceError(
-      `No se pudo crear la tarea en Notion. Verifica que la integración esté conectada a la base de datos y que los nombres de las properties coincidan. Detalle: ${message}`,
+      `No se pudo crear el ticket en Notion. Verifica que la opción "${ticketType}" exista en la columna "${props.ticketType}" y que la integración esté conectada. Detalle: ${message}`,
       502
     );
   }

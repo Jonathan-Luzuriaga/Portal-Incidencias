@@ -101,6 +101,7 @@ export async function POST(request: Request): Promise<NextResponse<IncidentApiRe
         pageUrl: result.pageUrl,
         taskTitle: result.taskTitle,
         evidenceCount: result.evidenceCount,
+        subtasks: result.subtasks,
       },
       { status: 201 }
     );

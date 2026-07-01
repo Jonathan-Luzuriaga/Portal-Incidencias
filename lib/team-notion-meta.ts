@@ -19,7 +19,7 @@ import { ServiceError } from "./types";
 let cachedTasksDataSourceId: string | null = null;
 let cachedProjectsDataSourceId: string | null = null;
 
-const PARENT_TICKET_TYPES = ["Épica", "Tarea"];
+const PARENT_TICKET_TYPES = ["Épica", "Tarea", "Ticket"];
 
 async function getDataSourceId(databaseId: string, cache: "tasks" | "projects"): Promise<string> {
   if (cache === "tasks" && cachedTasksDataSourceId) return cachedTasksDataSourceId;

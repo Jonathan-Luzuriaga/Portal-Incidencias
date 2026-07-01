@@ -22,14 +22,15 @@ export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro 
         </div>
         <h2 className="text-base font-semibold text-[#37352f]">{title}</h2>
         <p className="mt-1 text-sm text-[#787774]">
-          Las tareas se crearon en Notion con sprint y fechas del día.
+          El ticket padre y sus subtareas se crearon en Notion con sprint y fechas del día.
         </p>
       </div>
 
       {items.length > 0 && (
-        <ul className="mt-4 space-y-2 border-t border-[#efefef] pt-4">
+        <ul className="mt-4 space-y-3 border-t border-[#efefef] pt-4">
           {items.map((item) => (
             <li key={item.pageId} className="rounded-md bg-[#f7f7f5] px-3 py-2 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#9b9a97]">Ticket padre</p>
               <p className="font-medium text-[#37352f]">{item.taskTitle}</p>
               {item.pageUrl && (
                 <a
@@ -38,8 +39,30 @@ export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro 
                   rel="noopener noreferrer"
                   className="mt-1 inline-block text-[#2383e2] hover:underline"
                 >
-                  Ver en Notion
+                  Ver ticket en Notion
                 </a>
+              )}
+              {item.subtasks && item.subtasks.length > 0 && (
+                <ul className="mt-2 space-y-1.5 border-t border-[#efefef] pt-2">
+                  <li className="text-xs font-semibold uppercase tracking-wide text-[#9b9a97]">
+                    Subtareas ({item.subtasks.length})
+                  </li>
+                  {item.subtasks.map((sub) => (
+                    <li key={sub.pageId} className="pl-2">
+                      <p className="text-[#37352f]">{sub.title}</p>
+                      {sub.pageUrl && (
+                        <a
+                          href={sub.pageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2383e2] hover:underline"
+                        >
+                          Ver subtarea
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </li>
           ))}

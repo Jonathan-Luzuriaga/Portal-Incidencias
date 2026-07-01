@@ -35,6 +35,13 @@ export interface NotionConfig {
   };
   projectRelationId: string;
   priorityMap: Record<"Alto" | "Medio" | "Bajo", string>;
+  /** Tipo de ticket para incidencias cliente (padre). */
+  incidentTicketType: string;
+}
+
+/** Tipo Notion del ticket padre de incidencias cliente. */
+export function getIncidentTicketType(): string {
+  return process.env.NOTION_INCIDENT_TICKET_TYPE?.trim() || "Ticket";
 }
 
 export function getNotionConfig(): NotionConfig {
@@ -92,5 +99,6 @@ export function getNotionConfig(): NotionConfig {
       Medio: process.env.NOTION_PRIORITY_MEDIO ?? "Media",
       Bajo: process.env.NOTION_PRIORITY_BAJO ?? "Baja",
     },
+    incidentTicketType: getIncidentTicketType(),
   };
 }

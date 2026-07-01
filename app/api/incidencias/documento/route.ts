@@ -38,8 +38,17 @@ export async function POST(request: Request): Promise<NextResponse<IncidentApiRe
     const created = [];
     for (let i = 0; i < incidents.length; i++) {
       const images = (imagesByIncident[i] ?? []).map(documentImageToFile);
-      const result = await processAndCreateIncident(incidents[i], images);
-      created.push(result);
+      const result = await processAndCreateIncident(incidents[i], images, {
+        documentFile: docFile,
+        documentSectionText: text,
+      });
+      created.push({
+        pageId: result.pageId,
+        pageUrl: result.pageUrl,
+        taskTitle: result.taskTitle,
+        evidenceCount: result.evidenceCount,
+        subtasks: result.subtasks,
+      });
     }
 
     const first = created[0];
@@ -50,6 +59,7 @@ export async function POST(request: Request): Promise<NextResponse<IncidentApiRe
         pageUrl: first.pageUrl,
         taskTitle: first.taskTitle,
         evidenceCount: first.evidenceCount,
+        subtasks: first.subtasks,
         created,
         total: created.length,
       },

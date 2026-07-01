@@ -4,13 +4,13 @@ import { ServiceError } from "./types";
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // Límite Notion single-part upload.
 
 /**
- * Sube una imagen directamente a Notion (sin servicios externos).
- * Devuelve el file_upload.id para adjuntarlo a bloques image.
+ * Sube un archivo directamente a Notion (imagen, PDF, DOCX, etc.).
+ * Devuelve el file_upload.id para adjuntarlo a bloques image/file.
  */
-export async function uploadImageToNotion(file: File): Promise<string> {
+export async function uploadFileToNotion(file: File): Promise<string> {
   if (file.size > MAX_FILE_BYTES) {
     throw new ServiceError(
-      `La imagen "${file.name}" supera el límite de 20 MB de Notion.`,
+      `El archivo "${file.name}" supera el límite de 20 MB de Notion.`,
       400
     );
   }
@@ -53,9 +53,14 @@ export async function uploadImageToNotion(file: File): Promise<string> {
   }
 }
 
+/** Sube una imagen directamente a Notion (sin servicios externos). */
+export async function uploadImageToNotion(file: File): Promise<string> {
+  return uploadFileToNotion(file);
+}
+
 /** Sube todas las evidencias en paralelo y devuelve los IDs de file_upload. */
 export async function uploadEvidenceImages(files: File[]): Promise<string[]> {
   const images = files.filter((f) => f.size > 0);
   if (images.length === 0) return [];
-  return Promise.all(images.map(uploadImageToNotion));
+  return Promise.all(images.map(uploadFileToNotion));
 }
