@@ -41,7 +41,7 @@ async function resolveLocalExecutable(): Promise<string> {
 
 const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_REMOTE_EXEC_PATH ??
-  "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.tar.br";
+  "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
 
 /** Renderiza un documento HTML a PDF (A4) y devuelve el Buffer. */
 export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
