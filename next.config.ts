@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
     "jszip",
     "pngjs",
     "puppeteer-core",
-    "@sparticuz/chromium",
+    "@sparticuz/chromium-min",
   ],
   // Fuerza la inclusión de los assets de la plantilla corporativa en la función
   // serverless que genera el PDF (se leen vía fs y se incrustan como base64).

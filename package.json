@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@notionhq/client": "^5.22.0",
-    "@sparticuz/chromium": "^149.0.0",
+    "@sparticuz/chromium-min": "^149.0.0",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "next": "16.2.9",

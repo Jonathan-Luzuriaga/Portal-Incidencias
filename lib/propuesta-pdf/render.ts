@@ -39,6 +39,10 @@ async function resolveLocalExecutable(): Promise<string> {
   );
 }
 
+const CHROMIUM_PACK_URL =
+  process.env.CHROMIUM_REMOTE_EXEC_PATH ??
+  "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.tar.br";
+
 /** Renderiza un documento HTML a PDF (A4) y devuelve el Buffer. */
 export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
   const serverless = isServerless();
@@ -48,8 +52,8 @@ export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = 
   let args: string[];
 
   if (serverless) {
-    const chromium = (await import("@sparticuz/chromium")).default;
-    executablePath = await chromium.executablePath();
+    const chromium = (await import("@sparticuz/chromium-min")).default;
+    executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
     args = chromium.args;
   } else {
     executablePath = await resolveLocalExecutable();
