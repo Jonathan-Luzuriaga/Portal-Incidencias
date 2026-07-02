@@ -43,27 +43,39 @@ const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_REMOTE_EXEC_PATH ??
   "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
 
-/** Renderiza un documento HTML a PDF (A4) y devuelve el Buffer. */
-export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
+const RENDER_TIMEOUT_MS = 52_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new ServiceError(message, 504)), ms);
+    }),
+  ]);
+}
+
+async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
   const serverless = isServerless();
   const puppeteer = (await import("puppeteer-core")).default;
 
   let executablePath: string;
   let args: string[];
+  let headless: boolean | "shell" = true;
 
   if (serverless) {
     const chromium = (await import("@sparticuz/chromium-min")).default;
     executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
-    args = chromium.args;
+    args = await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
+    headless = "shell";
   } else {
     executablePath = await resolveLocalExecutable();
     args = ["--no-sandbox", "--disable-setuid-sandbox"];
   }
 
-  const browser = await puppeteer.launch({ args, executablePath, headless: true });
+  const browser = await puppeteer.launch({ args, executablePath, headless });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load", timeout: 45000 });
+    await page.setContent(html, { waitUntil: "load", timeout: 30000 });
     try {
       await page.evaluate(async () => {
         await document.fonts.ready;
@@ -73,12 +85,11 @@ export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = 
     }
 
     if (options.preferCSSPageSize) {
-      // La plantilla corporativa define @page (A4, margin 0) y sus propios pies
-      // por página; se respeta el tamaño del CSS sin márgenes ni footer de Puppeteer.
       const pdf = await page.pdf({
         printBackground: true,
         preferCSSPageSize: true,
         margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        timeout: 30000,
       });
       return Buffer.from(pdf);
     }
@@ -87,9 +98,19 @@ export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = 
       format: "A4",
       printBackground: true,
       margin: { top: "16mm", right: "14mm", bottom: "14mm", left: "14mm" },
+      timeout: 30000,
     });
     return Buffer.from(pdf);
   } finally {
     await browser.close();
   }
+}
+
+/** Renderiza un documento HTML a PDF (A4) y devuelve el Buffer. */
+export async function renderHtmlToPdf(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
+  return withTimeout(
+    renderHtmlToPdfInner(html, options),
+    RENDER_TIMEOUT_MS,
+    "Tiempo agotado generando el PDF. Intenta de nuevo."
+  );
 }

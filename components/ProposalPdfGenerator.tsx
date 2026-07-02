@@ -6,6 +6,8 @@ import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 
 type Status = "idle" | "loading" | "error";
 
+const DOWNLOAD_TIMEOUT_MS = 90_000;
+
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
 const fieldClasses =
@@ -21,6 +23,39 @@ function Spinner() {
       <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
     </svg>
   );
+}
+
+function buildPdfUrl(pageId: string): string {
+  return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
+}
+
+function parseFilenameFromDisposition(header: string): string {
+  const utf8Match = header.match(/filename\*=UTF-8''([^;\s]+)/i)?.[1];
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match);
+    } catch {
+      // continuar con filename ASCII
+    }
+  }
+  return header.match(/filename="([^"]+)"/)?.[1] ?? "Propuesta.pdf";
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+function openDirectDownload(url: string): boolean {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  return opened !== null;
 }
 
 export default function ProposalPdfGenerator() {
@@ -62,8 +97,20 @@ export default function ProposalPdfGenerator() {
     setStatus("loading");
     setErrorMsg("");
 
+    const url = buildPdfUrl(selected);
+
+    // Descarga directa: más fiable entre navegadores que fetch + blob.
+    if (openDirectDownload(url)) {
+      window.setTimeout(() => setStatus("idle"), 2500);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
     try {
-      const res = await fetch(`/api/propuestas/pdf?pageId=${encodeURIComponent(selected)}`);
+      const res = await fetch(url, { signal: controller.signal });
+      window.clearTimeout(timeoutId);
 
       if (!res.ok) {
         let message = `Error ${res.status}`;
@@ -78,25 +125,35 @@ export default function ProposalPdfGenerator() {
         return;
       }
 
-      const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match?.[1] ?? "Propuesta.pdf";
+      const contentType = res.headers.get("Content-Type") ?? "";
+      if (!contentType.includes("application/pdf")) {
+        setErrorMsg("La respuesta no fue un PDF. Usa el enlace directo de abajo.");
+        setStatus("error");
+        return;
+      }
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const blob = await res.blob();
+      if (blob.size === 0) {
+        setErrorMsg("El PDF llegó vacío. Intenta de nuevo con el enlace directo.");
+        setStatus("error");
+        return;
+      }
+
+      const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
+      triggerBlobDownload(blob, filename);
       setStatus("idle");
-    } catch {
-      setErrorMsg("No se pudo generar el PDF. Inténtalo de nuevo.");
+    } catch (err) {
+      window.clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setErrorMsg("La generación tardó más de 90 segundos. Usa el enlace directo de abajo.");
+      } else {
+        setErrorMsg("No se pudo generar el PDF. Usa el enlace directo de abajo.");
+      }
       setStatus("error");
     }
   }
+
+  const directDownloadUrl = selected ? buildPdfUrl(selected) : "";
 
   return (
     <div className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5">
@@ -129,14 +186,36 @@ export default function ProposalPdfGenerator() {
           </select>
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
-          Selecciona una propuesta y descárgala con el formato corporativo.
+          Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta
+          60 segundos.
         </p>
       </div>
+
+      {generating && (
+        <p className="text-sm text-[#787774]">
+          Se abrió la descarga en una nueva pestaña. Puede tardar hasta 60 segundos la primera vez.
+        </p>
+      )}
 
       {status === "error" && (
         <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
           {errorMsg}
         </div>
+      )}
+
+      {directDownloadUrl && (generating || status === "error") && (
+        <p className="text-sm text-[#787774]">
+          Si no se descarga automáticamente,{" "}
+          <a
+            href={directDownloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-[#2383e2] underline underline-offset-2 hover:text-[#1a73d1]"
+          >
+            abre la descarga directa en una nueva pestaña
+          </a>
+          .
+        </p>
       )}
 
       <button
