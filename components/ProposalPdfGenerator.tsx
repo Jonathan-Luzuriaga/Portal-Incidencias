@@ -29,6 +29,20 @@ function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
 }
 
+function buildPdfAbsoluteUrl(pageId: string): string {
+  if (typeof window === "undefined") return buildPdfUrl(pageId);
+  return `${window.location.origin}${buildPdfUrl(pageId)}`;
+}
+
+function isEmbeddedInFrame(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
 function parseFilenameFromDisposition(header: string): string {
   const utf8Match = header.match(/filename\*=UTF-8''([^;\s]+)/i)?.[1];
   if (utf8Match) {
@@ -60,8 +74,22 @@ export default function ProposalPdfGenerator() {
   const [selected, setSelected] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [embedded, setEmbedded] = useState(false);
+  const [pdfAbsoluteUrl, setPdfAbsoluteUrl] = useState("");
 
   const generating = status === "loading";
+
+  useEffect(() => {
+    setEmbedded(isEmbeddedInFrame());
+  }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setPdfAbsoluteUrl("");
+      return;
+    }
+    setPdfAbsoluteUrl(buildPdfAbsoluteUrl(selected));
+  }, [selected]);
 
   useEffect(() => {
     let active = true;
@@ -172,12 +200,13 @@ export default function ProposalPdfGenerator() {
           </select>
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
-          Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta
-          60 segundos.
+          {embedded
+            ? "Desde Notion, el PDF se genera y descarga en una pestaña nueva del navegador."
+            : "Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta 60 segundos."}
         </p>
       </div>
 
-      {generating && (
+      {generating && !embedded && (
         <p className="text-sm text-[#787774]">
           Generando el PDF… puede tardar hasta 60 segundos la primera vez.
         </p>
@@ -189,15 +218,32 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={generating || !selected || propuestas.length === 0}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {generating && <Spinner />}
-        {generating ? "Generando PDF…" : "Descargar PDF"}
-      </button>
+      {embedded ? (
+        <a
+          href={pdfAbsoluteUrl || undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-disabled={!selected || propuestas.length === 0}
+          className={
+            "inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] " +
+            (!selected || propuestas.length === 0
+              ? "pointer-events-none cursor-not-allowed opacity-70"
+              : "")
+          }
+        >
+          Descargar PDF
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={generating || !selected || propuestas.length === 0}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {generating && <Spinner />}
+          {generating ? "Generando PDF…" : "Descargar PDF"}
+        </button>
+      )}
     </div>
   );
 }
