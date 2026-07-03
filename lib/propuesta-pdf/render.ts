@@ -54,6 +54,33 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Lanza el navegador con reintentos ante `ETXTBSY`, un error de carrera en
+ * serverless: el binario de Chromium recién extraído en /tmp aún se está
+ * escribiendo cuando se intenta ejecutar. Reintentar con una breve espera lo
+ * resuelve porque en el segundo intento el binario ya está en disco.
+ */
+async function launchWithRetry(
+  puppeteer: typeof import("puppeteer-core").default,
+  opts: { args: string[]; executablePath: string; headless: boolean | "shell" }
+): Promise<import("puppeteer-core").Browser> {
+  const maxAttempts = 4;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await puppeteer.launch(opts);
+    } catch (err) {
+      lastErr = err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("ETXTBSY") || attempt === maxAttempts) throw err;
+      await sleep(300 * attempt);
+    }
+  }
+  throw lastErr;
+}
+
 async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
   const serverless = isServerless();
   const puppeteer = (await import("puppeteer-core")).default;
@@ -72,7 +99,7 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
     args = ["--no-sandbox", "--disable-setuid-sandbox"];
   }
 
-  const browser = await puppeteer.launch({ args, executablePath, headless });
+  const browser = await launchWithRetry(puppeteer, { args, executablePath, headless });
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load", timeout: 30000 });

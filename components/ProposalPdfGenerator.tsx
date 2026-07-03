@@ -53,11 +53,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-function openDirectDownload(url: string): boolean {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  return opened !== null;
-}
-
 export default function ProposalPdfGenerator() {
   const [propuestas, setPropuestas] = useState<PropuestaListItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -98,13 +93,6 @@ export default function ProposalPdfGenerator() {
     setErrorMsg("");
 
     const url = buildPdfUrl(selected);
-
-    // Descarga directa: más fiable entre navegadores que fetch + blob.
-    if (openDirectDownload(url)) {
-      window.setTimeout(() => setStatus("idle"), 2500);
-      return;
-    }
-
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
 
@@ -127,14 +115,14 @@ export default function ProposalPdfGenerator() {
 
       const contentType = res.headers.get("Content-Type") ?? "";
       if (!contentType.includes("application/pdf")) {
-        setErrorMsg("La respuesta no fue un PDF. Usa el enlace directo de abajo.");
+        setErrorMsg("La respuesta no fue un PDF. Intenta de nuevo.");
         setStatus("error");
         return;
       }
 
       const blob = await res.blob();
       if (blob.size === 0) {
-        setErrorMsg("El PDF llegó vacío. Intenta de nuevo con el enlace directo.");
+        setErrorMsg("El PDF llegó vacío. Intenta de nuevo.");
         setStatus("error");
         return;
       }
@@ -145,15 +133,13 @@ export default function ProposalPdfGenerator() {
     } catch (err) {
       window.clearTimeout(timeoutId);
       if (err instanceof DOMException && err.name === "AbortError") {
-        setErrorMsg("La generación tardó más de 90 segundos. Usa el enlace directo de abajo.");
+        setErrorMsg("La generación tardó demasiado. Intenta de nuevo.");
       } else {
-        setErrorMsg("No se pudo generar el PDF. Usa el enlace directo de abajo.");
+        setErrorMsg("No se pudo generar el PDF. Intenta de nuevo.");
       }
       setStatus("error");
     }
   }
-
-  const directDownloadUrl = selected ? buildPdfUrl(selected) : "";
 
   return (
     <div className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5">
@@ -193,7 +179,7 @@ export default function ProposalPdfGenerator() {
 
       {generating && (
         <p className="text-sm text-[#787774]">
-          Se abrió la descarga en una nueva pestaña. Puede tardar hasta 60 segundos la primera vez.
+          Generando el PDF… puede tardar hasta 60 segundos la primera vez.
         </p>
       )}
 
@@ -201,21 +187,6 @@ export default function ProposalPdfGenerator() {
         <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
           {errorMsg}
         </div>
-      )}
-
-      {directDownloadUrl && (generating || status === "error") && (
-        <p className="text-sm text-[#787774]">
-          Si no se descarga automáticamente,{" "}
-          <a
-            href={directDownloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-[#2383e2] underline underline-offset-2 hover:text-[#1a73d1]"
-          >
-            abre la descarga directa en una nueva pestaña
-          </a>
-          .
-        </p>
       )}
 
       <button
