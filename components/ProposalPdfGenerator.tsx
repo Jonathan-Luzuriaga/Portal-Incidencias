@@ -30,6 +30,12 @@ function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
 }
 
+function toAbsoluteUrl(path: string): string {
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).href;
+}
+
+/** true si la página corre dentro de un iframe (p. ej. embed de Notion con sandbox). */
 function isEmbeddedInFrame(): boolean {
   try {
     return window.self !== window.top;
@@ -59,6 +65,18 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+/** En iframe sandboxed (Notion) blob/download está bloqueado; el API con Content-Disposition sí descarga en pestaña nueva. */
+function openPdfDownload(path: string): void {
+  const href = toAbsoluteUrl(path);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 async function downloadViaFetch(url: string): Promise<void> {
@@ -91,6 +109,9 @@ async function downloadViaFetch(url: string): Promise<void> {
     }
 
     const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
+    if (isEmbeddedInFrame()) {
+      throw new Error("EMBED_SANDBOX");
+    }
     triggerBlobDownload(blob, filename);
   } catch (err) {
     window.clearTimeout(timeoutId);
@@ -101,28 +122,21 @@ async function downloadViaFetch(url: string): Promise<void> {
   }
 }
 
-/** En embed de Notion el sandbox puede bloquear descargas por blob; abrir la API en pestaña nueva. */
-function downloadViaNewTab(url: string): void {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (!opened) {
-    throw new Error(
-      "No se pudo abrir la descarga. Permite ventanas emergentes o abre el portal fuera del embed de Notion."
-    );
-  }
-}
-
-/**
- * Intenta fetch+blob (funciona fuera de Notion y a menudo dentro del embed).
- * Si falla en iframe, abre la URL del API en una pestaña nueva (Content-Disposition del servidor).
- */
+/** Descarga directa fuera de iframe; en Notion embed abre el API en pestaña nueva. */
 async function downloadPdf(url: string): Promise<"blob" | "tab"> {
+  if (isEmbeddedInFrame()) {
+    openPdfDownload(url);
+    return "tab";
+  }
   try {
     await downloadViaFetch(url);
     return "blob";
   } catch (err) {
-    if (!isEmbeddedInFrame()) throw err;
-    downloadViaNewTab(url);
-    return "tab";
+    if (err instanceof Error && err.message === "EMBED_SANDBOX") {
+      openPdfDownload(url);
+      return "tab";
+    }
+    throw err;
   }
 }
 
@@ -133,8 +147,14 @@ export default function ProposalPdfGenerator() {
   const [selected, setSelected] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [embedded, setEmbedded] = useState(false);
 
   const generating = status === "loading";
+  const pdfAbsoluteUrl = selected ? toAbsoluteUrl(buildPdfUrl(selected)) : "";
+
+  useEffect(() => {
+    setEmbedded(isEmbeddedInFrame());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -162,11 +182,17 @@ export default function ProposalPdfGenerator() {
 
   async function handleDownload() {
     if (!selected || generating) return;
-    setStatus("loading");
     setErrorMsg("");
 
     const url = buildPdfUrl(selected);
 
+    if (isEmbeddedInFrame()) {
+      openPdfDownload(url);
+      setStatus("opened_tab");
+      return;
+    }
+
+    setStatus("loading");
     try {
       const mode = await downloadPdf(url);
       setStatus(mode === "tab" ? "opened_tab" : "idle");
@@ -220,7 +246,17 @@ export default function ProposalPdfGenerator() {
 
       {status === "opened_tab" && (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Se abrió una pestaña nueva con el PDF. Si no la ves, permite ventanas emergentes para este sitio.
+          Se abrió una pestaña para generar y descargar el PDF. Espera 1–2 minutos hasta que termine.
+          {pdfAbsoluteUrl ? (
+            <>
+              {" "}
+              Si no se abrió,{" "}
+              <a href={pdfAbsoluteUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#2383e2] underline">
+                haz clic aquí
+              </a>
+              .
+            </>
+          ) : null}
         </div>
       )}
 
@@ -239,6 +275,12 @@ export default function ProposalPdfGenerator() {
         {generating && <Spinner />}
         {generating ? "Generando PDF…" : "Descargar PDF"}
       </button>
+
+      {embedded && selected && pdfAbsoluteUrl ? (
+        <p className="text-center text-xs text-[#9b9a97]">
+          Dentro de Notion la descarga se abre en otra pestaña del navegador.
+        </p>
+      ) : null}
     </div>
   );
 }
