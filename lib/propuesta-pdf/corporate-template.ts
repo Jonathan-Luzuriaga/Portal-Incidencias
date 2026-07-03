@@ -157,7 +157,7 @@ export function buildCorporateHtml(
       </div>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-index">
       <div class="page-inner page-inner-standard">
         <h2 class="index-title">Índice</h2>
         <table class="index-table">
@@ -192,7 +192,7 @@ export function buildCorporateHtml(
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>3</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Objetivos</h2>
         <ul class="content-list">
@@ -217,7 +217,7 @@ ${objetivosHtml(content.objetivos)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>4</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
         <p>Dentro de la metodología SCRUM el proceso es levantar los requerimientos, luego ir construyéndose en un período corto de tiempo para que el cliente pueda validarlos.</p>
         <figure class="content-figure figure-wide figure-top">
@@ -245,7 +245,7 @@ ${objetivosHtml(content.objetivos)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>5</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
         <p>La responsabilidad del Product Owner es asegurarse de que están entregando el mayor valor.</p>
         <p>La responsabilidad del Scrum Master es unir todo y garantizar que el proceso de SCRUM se haga bien. En términos prácticos, eso significa que ayudan al product owner a definir el valor, al equipo de desarrollo a entregar el valor y al equipo de scrum a mejorar.</p>
@@ -274,7 +274,7 @@ ${solutionsRows(content)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>7</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Personal</h2>
         <p>El personal requerido para las diferentes fases del proyecto, son necesarios ya que se maneja entregas parciales del proyecto, estas entregas son ITERATIVAS incrementales, por lo cual en cada fase cada miembro del equipo realiza partes fundamentales para realizar las entregas a tiempo, con la calidad necesaria.</p>
@@ -356,7 +356,7 @@ ${requirementsRows(content)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>10</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Nota</h2>
         <p>Se establecerá un límite de tiempo posterior a la entrega y notificación de finalización para que el cliente realice la validación y/o despliegue correspondiente.</p>
@@ -373,7 +373,7 @@ ${requirementsRows(content)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>11</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-compact page-final">
       <div class="page-inner page-inner-standard page-last">
         <h2 class="section-title">Forma de pago</h2>
         <ul class="payment-list">

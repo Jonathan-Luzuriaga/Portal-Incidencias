@@ -135,16 +135,16 @@ a { color: #2f67c7; text-decoration: underline; }
 .cover-value { font-size: 18px; }
 
 .cover-contact { position: relative; z-index: 3; margin-bottom: 8px; }
-.cover-contact p { margin: 0 0 8px; color: #111111; font-size: 13px; font-weight: 700; }
+.cover-contact p { margin: 0 0 2px; color: #111111; font-size: 13px; font-weight: 700; line-height: 1.35; }
 .cover-contact-link { color: inherit; text-decoration: none; }
-.cover-contact-title { margin-bottom: 10px; font-size: 12px; }
-.cover-date { margin-top: 18px; font-weight: 400; }
-.cover-validity { margin-top: 14px; }
+.cover-contact-title { margin-bottom: 4px; font-size: 12px; }
+.cover-date { margin-top: 6px; font-weight: 700; }
+.cover-validity { margin-top: 2px; }
 
 .cover-logo { position: absolute; right: -45px; bottom: 50px; width: 300px; z-index: 3; }
 
 .index-title {
-  margin: 100px 0 72px; text-align: center;
+  margin: 48px 0 36px; text-align: center;
   font-family: "Montserrat", Arial, Helvetica, sans-serif;
   font-size: 29px; font-weight: 800; color: #000000;
 }
@@ -173,17 +173,27 @@ a { color: #2f67c7; text-decoration: underline; }
   font-size: 15px; font-weight: 700;
 }
 .section-gap-large { margin-top: 36px; }
-.section-gap-medium { margin-top: 28px; }
+.section-gap-medium { margin-top: 22px; }
 
-.subsection-title { margin: 24px 0 14px; color: #000000; font-size: 13px; font-weight: 700; }
-.subsection-spacing { margin-top: 36px; }
+.subsection-title { margin: 16px 0 8px; color: #000000; font-size: 13px; font-weight: 700; }
+.subsection-spacing { margin-top: 20px; }
 
-p { margin: 0 0 14px; font-size: 13px; line-height: 1.95; page-break-inside: avoid; break-inside: avoid; }
+.page-inner-standard p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: justify;
+  text-justify: inter-word;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoid; break-inside: avoid; }
 
 .clause-block { page-break-inside: avoid; break-inside: avoid; }
 
-.content-list, .phase-list, .solution-list, .payment-list { margin: 0 0 14px 18px; padding-left: 16px; page-break-inside: avoid; break-inside: avoid; }
-.content-list li, .phase-list li, .solution-list li, .payment-list li { margin-bottom: 8px; font-size: 13px; line-height: 1.9; page-break-inside: avoid; break-inside: avoid; }
+.content-list, .phase-list, .solution-list, .payment-list { margin: 0 0 8px 18px; padding-left: 16px; page-break-inside: avoid; break-inside: avoid; }
+.content-list li, .phase-list li, .solution-list li, .payment-list li { margin-bottom: 4px; font-size: 13px; line-height: 1.45; page-break-inside: avoid; break-inside: avoid; }
 .phase-list>li { margin-bottom: 4px; }
 .phase-list ul li { font-size: 12px; line-height: 1.5; margin-bottom: 1px; }
 .phase-list ul, .solution-sublist, .payment-list ul { margin: 2px 0 0 0; padding-left: 30px; }
@@ -219,7 +229,7 @@ p { margin: 0 0 14px; font-size: 13px; line-height: 1.95; page-break-inside: avo
 .center-cell { text-align: center; }
 
 .note-small { margin-top: 12px; font-size: 12px; font-weight: 700; line-height: 1.5; }
-.note-inline { margin: 14px 0 18px; font-size: 11px; line-height: 1.85; }
+.note-inline { margin: 8px 0 10px; font-size: 11px; line-height: 1.45; }
 
 .data-table-activities th:nth-child(1), .data-table-activities td:nth-child(1) { width: 28%; text-align: center; }
 .data-table-activities th:nth-child(2), .data-table-activities td:nth-child(2) { width: 42%; }
@@ -258,7 +268,35 @@ p { margin: 0 0 14px; font-size: 13px; line-height: 1.95; page-break-inside: avo
 .price-total td { border-top: 1px solid #d6d6d6; border-bottom: 1px solid #d6d6d6; color: #0d5b7d; padding-top: 8px; padding-bottom: 8px; }
 .price-note { margin-top: 8px; font-size: 12px; font-weight: 700; }
 
-.page-last { padding-top: 40px; }
+.page-last { padding-top: 24px; }
+
+/* SDE-863 — compactación de páginas densas (workflow 4.4) */
+.page-compact .section-title { margin-bottom: 10px; }
+.page-compact .section-gap-medium { margin-top: 16px; }
+.page-compact .subsection-title { margin-top: 8px; margin-bottom: 6px; }
+.page-compact .subsection-spacing { margin-top: 12px; }
+.page-compact p { margin: 4px 0; line-height: 1.45; }
+.page-compact .content-list li,
+.page-compact .phase-list li { margin-bottom: 2px; line-height: 1.45; }
+.page-compact .content-figure { margin: 10px auto 14px; }
+.page-compact .note-inline { margin: 8px 0 10px; line-height: 1.45; }
+
+.page-index .index-title { margin: 28px 0 18px; }
+.page-index .index-table td { padding: 6px 0; line-height: 1.35; }
+.page-index .index-table { margin-top: 8px; }
+
+.page-quote .quote-layout { min-height: 1122px; padding-top: 0; align-items: center; }
+.page-cover .cover-logo { bottom: 24px; }
+
+.page-final .section-gap-medium { margin-top: 14px; }
+.page-final .payment-list { margin-bottom: 6px; }
+
+.page-inner-standard .center-cell { text-align: center; }
+.page-inner-standard .price-values,
+.page-inner-standard .price-summary td:last-child,
+.page-inner-standard .price-total td:last-child { text-align: right; }
+.page-inner-standard .note-small,
+.page-inner-standard .price-note { text-align: justify; }
 
 .doc-footer {
   position: absolute; left: 60px; right: 56px; bottom: 18px; z-index: 3;

@@ -30,6 +30,11 @@ function formatSpanishDate(date: Date): string {
   return `${date.getDate()} de ${MONTHS_ES[date.getMonth()]} del ${date.getFullYear()}`;
 }
 
+/** Fecha en español para portada del PDF (día de generación). */
+export function formatPropuestaPdfDate(date: Date = new Date()): string {
+  return formatSpanishDate(date);
+}
+
 let cachedTasksDataSourceId: string | null = null;
 
 async function getTasksDataSourceId(): Promise<string> {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
-import { getPropuestaContent, blocksToText } from "@/lib/notion-propuesta-list";
+import { getPropuestaContent, blocksToText, formatPropuestaPdfDate } from "@/lib/notion-propuesta-list";
 import { buildCorporateContent } from "@/lib/deepseek-propuesta-pdf";
 import { computeFinancials } from "@/lib/propuesta-pdf/calc";
 import { buildCorporateHtml } from "@/lib/propuesta-pdf/corporate-template";
@@ -48,7 +48,7 @@ export async function GET(request: Request): Promise<Response> {
       name: cover.name,
       code: cover.code,
       version: cover.version,
-      fecha: cover.fecha,
+      fecha: formatPropuestaPdfDate(new Date()),
       validezDias: Number(String(cover.validezDias).replace(/[^0-9]/g, "")) || 45,
     };
 

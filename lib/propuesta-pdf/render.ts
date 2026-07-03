@@ -121,6 +121,11 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 45000 });
     try {
+      await page.emulateMediaType("print");
+    } catch {
+      // no crítico
+    }
+    try {
       await page.evaluate(async () => {
         await document.fonts.ready;
       });
