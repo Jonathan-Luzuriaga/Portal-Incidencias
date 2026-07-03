@@ -6,6 +6,8 @@ export interface RenderPdfOptions {
    * Se usa con la plantilla corporativa, que ya trae márgenes y pies por página.
    */
   preferCSSPageSize?: boolean;
+  /** Binario ya resuelto por {@link warmChromiumExecutable} para evitar espera duplicada. */
+  executablePath?: string;
 }
 
 function isServerless(): boolean {
@@ -43,7 +45,22 @@ const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_REMOTE_EXEC_PATH ??
   "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
 
-const RENDER_TIMEOUT_MS = 52_000;
+const RENDER_TIMEOUT_MS = 100_000;
+
+/** Ruta del binario de Chromium en serverless; se reutiliza entre invocaciones calientes. */
+let cachedExecutablePath: Promise<string> | null = null;
+
+/** Precalienta la descarga/extracción de Chromium en paralelo con Notion o DeepSeek. */
+export function warmChromiumExecutable(): Promise<string> {
+  if (!isServerless()) return resolveLocalExecutable();
+  if (!cachedExecutablePath) {
+    cachedExecutablePath = (async () => {
+      const chromium = (await import("@sparticuz/chromium-min")).default;
+      return chromium.executablePath(CHROMIUM_PACK_URL);
+    })();
+  }
+  return cachedExecutablePath;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return Promise.race([
@@ -91,7 +108,7 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
 
   if (serverless) {
     const chromium = (await import("@sparticuz/chromium-min")).default;
-    executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+    executablePath = options.executablePath ?? (await warmChromiumExecutable());
     args = await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
     headless = "shell";
   } else {
@@ -102,7 +119,7 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
   const browser = await launchWithRetry(puppeteer, { args, executablePath, headless });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load", timeout: 30000 });
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 45000 });
     try {
       await page.evaluate(async () => {
         await document.fonts.ready;

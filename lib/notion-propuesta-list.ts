@@ -153,24 +153,23 @@ async function fetchChildren(blockId: string): Promise<RawBlock[]> {
 
 async function resolveBlocks(blockId: string, depth: number): Promise<PropuestaBlock[]> {
   const raw = await fetchChildren(blockId);
-  const resolved: PropuestaBlock[] = [];
 
-  for (const block of raw) {
-    const item = block as unknown as PropuestaBlock;
+  return Promise.all(
+    raw.map(async (block) => {
+      const item = block as unknown as PropuestaBlock;
 
-    if (block.type === "table" && block.has_children) {
-      const rows = await fetchChildren(block.id);
-      item.__rows = rows
-        .filter((r) => r.type === "table_row")
-        .map((r) => ({ cells: (r.table_row as { cells: unknown[][] }).cells as never }));
-    } else if (block.has_children && depth < 3) {
-      item.__children = await resolveBlocks(block.id, depth + 1);
-    }
+      if (block.type === "table" && block.has_children) {
+        const rows = await fetchChildren(block.id);
+        item.__rows = rows
+          .filter((r) => r.type === "table_row")
+          .map((r) => ({ cells: (r.table_row as { cells: unknown[][] }).cells as never }));
+      } else if (block.has_children && depth < 3) {
+        item.__children = await resolveBlocks(block.id, depth + 1);
+      }
 
-    resolved.push(item);
-  }
-
-  return resolved;
+      return item;
+    })
+  );
 }
 
 function findCoverFromMetadata(blocks: PropuestaBlock[]): Partial<PropuestaCoverData> {

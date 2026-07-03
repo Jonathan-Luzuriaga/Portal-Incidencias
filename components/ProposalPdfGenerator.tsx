@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 
-type Status = "idle" | "loading" | "error";
+type Status = "idle" | "loading" | "error" | "opened_tab";
 
-const DOWNLOAD_TIMEOUT_MS = 90_000;
+/** Debe superar maxDuration del API (120 s) con margen. */
+const DOWNLOAD_TIMEOUT_MS = 130_000;
 
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
@@ -60,55 +61,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-/**
- * En iframes (Notion embed) el sandbox bloquea descargas vía blob.
- * Un iframe oculto apuntando a la API usa Content-Disposition del servidor
- * y suele funcionar sin abrir pestañas ni salir de la página.
- */
-function downloadViaHiddenFrame(url: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
-    iframe.setAttribute("aria-hidden", "true");
-
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("La generación tardó demasiado. Intenta de nuevo."));
-    }, DOWNLOAD_TIMEOUT_MS);
-
-    function cleanup() {
-      window.clearTimeout(timeoutId);
-      window.setTimeout(() => iframe.remove(), 3000);
-    }
-
-    iframe.onload = () => {
-      try {
-        const text = iframe.contentDocument?.body?.innerText?.trim() ?? "";
-        if (text.startsWith("{")) {
-          const data = JSON.parse(text) as { ok?: boolean; error?: string };
-          if (data.ok === false && data.error) {
-            cleanup();
-            reject(new Error(data.error));
-            return;
-          }
-        }
-      } catch {
-        // Respuesta PDF u otro binario: la descarga la gestiona el navegador.
-      }
-      cleanup();
-      resolve();
-    };
-
-    iframe.onerror = () => {
-      cleanup();
-      reject(new Error("No se pudo generar el PDF. Intenta de nuevo."));
-    };
-
-    iframe.src = url;
-    document.body.appendChild(iframe);
-  });
-}
-
 async function downloadViaFetch(url: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
@@ -146,6 +98,31 @@ async function downloadViaFetch(url: string): Promise<void> {
       throw new Error("La generación tardó demasiado. Intenta de nuevo.");
     }
     throw err;
+  }
+}
+
+/** En embed de Notion el sandbox puede bloquear descargas por blob; abrir la API en pestaña nueva. */
+function downloadViaNewTab(url: string): void {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    throw new Error(
+      "No se pudo abrir la descarga. Permite ventanas emergentes o abre el portal fuera del embed de Notion."
+    );
+  }
+}
+
+/**
+ * Intenta fetch+blob (funciona fuera de Notion y a menudo dentro del embed).
+ * Si falla en iframe, abre la URL del API en una pestaña nueva (Content-Disposition del servidor).
+ */
+async function downloadPdf(url: string): Promise<"blob" | "tab"> {
+  try {
+    await downloadViaFetch(url);
+    return "blob";
+  } catch (err) {
+    if (!isEmbeddedInFrame()) throw err;
+    downloadViaNewTab(url);
+    return "tab";
   }
 }
 
@@ -191,12 +168,8 @@ export default function ProposalPdfGenerator() {
     const url = buildPdfUrl(selected);
 
     try {
-      if (isEmbeddedInFrame()) {
-        await downloadViaHiddenFrame(url);
-      } else {
-        await downloadViaFetch(url);
-      }
-      setStatus("idle");
+      const mode = await downloadPdf(url);
+      setStatus(mode === "tab" ? "opened_tab" : "idle");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
       setStatus("error");
@@ -235,14 +208,20 @@ export default function ProposalPdfGenerator() {
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
           Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta
-          60 segundos.
+          2 minutos.
         </p>
       </div>
 
       {generating && (
         <p className="text-sm text-[#787774]">
-          Generando el PDF… puede tardar hasta 60 segundos la primera vez.
+          Generando el PDF… puede tardar hasta 2 minutos la primera vez (Notion + IA + maquetación).
         </p>
+      )}
+
+      {status === "opened_tab" && (
+        <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
+          Se abrió una pestaña nueva con el PDF. Si no la ves, permite ventanas emergentes para este sitio.
+        </div>
       )}
 
       {status === "error" && (

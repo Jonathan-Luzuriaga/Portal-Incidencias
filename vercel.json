@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "app/api/propuestas/pdf/route.ts": {
+      "maxDuration": 120
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

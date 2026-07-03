@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { renderHtmlToPdf } from "@/lib/propuesta-pdf/render";
+import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent, blocksToText } from "@/lib/notion-propuesta-list";
 import { buildCorporateContent } from "@/lib/deepseek-propuesta-pdf";
 import { computeFinancials } from "@/lib/propuesta-pdf/calc";
@@ -9,7 +9,7 @@ import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
 import { ServiceError } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function sanitizeFilename(input: string): string {
   const base = input
@@ -39,7 +39,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const { title, cover, blocks } = await getPropuestaContent(pageId);
+    const [{ title, cover, blocks }, executablePath] = await Promise.all([
+      getPropuestaContent(pageId),
+      warmChromiumExecutable(),
+    ]);
 
     const corporateCover: CorporateCover = {
       name: cover.name,
@@ -54,7 +57,7 @@ export async function GET(request: Request): Promise<Response> {
     const financials = computeFinancials(content.actividades);
     const assets = loadCorporateAssets();
     const html = buildCorporateHtml(content, financials, assets);
-    const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true });
+    const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
 
     const body = new Uint8Array(pdf);
 
