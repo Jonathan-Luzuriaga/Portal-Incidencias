@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import PropuestasWorkspace from "@/components/PropuestasWorkspace";
 
+export const dynamic = "force-dynamic";
+
 function FormFallback() {
   return (
     <div className="rounded-lg border border-[#efefef] bg-white p-5 text-sm text-[#787774]">
