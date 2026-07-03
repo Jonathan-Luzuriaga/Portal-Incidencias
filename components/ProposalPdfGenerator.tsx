@@ -29,6 +29,14 @@ function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
 }
 
+function isEmbeddedInFrame(): boolean {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
 function parseFilenameFromDisposition(header: string): string {
   const utf8Match = header.match(/filename\*=UTF-8''([^;\s]+)/i)?.[1];
   if (utf8Match) {
@@ -50,6 +58,95 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+/**
+ * En iframes (Notion embed) el sandbox bloquea descargas vía blob.
+ * Un iframe oculto apuntando a la API usa Content-Disposition del servidor
+ * y suele funcionar sin abrir pestañas ni salir de la página.
+ */
+function downloadViaHiddenFrame(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none";
+    iframe.setAttribute("aria-hidden", "true");
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("La generación tardó demasiado. Intenta de nuevo."));
+    }, DOWNLOAD_TIMEOUT_MS);
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      window.setTimeout(() => iframe.remove(), 3000);
+    }
+
+    iframe.onload = () => {
+      try {
+        const text = iframe.contentDocument?.body?.innerText?.trim() ?? "";
+        if (text.startsWith("{")) {
+          const data = JSON.parse(text) as { ok?: boolean; error?: string };
+          if (data.ok === false && data.error) {
+            cleanup();
+            reject(new Error(data.error));
+            return;
+          }
+        }
+      } catch {
+        // Respuesta PDF u otro binario: la descarga la gestiona el navegador.
+      }
+      cleanup();
+      resolve();
+    };
+
+    iframe.onerror = () => {
+      cleanup();
+      reject(new Error("No se pudo generar el PDF. Intenta de nuevo."));
+    };
+
+    iframe.src = url;
+    document.body.appendChild(iframe);
+  });
+}
+
+async function downloadViaFetch(url: string): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    window.clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      let message = `Error ${res.status}`;
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (data.error) message = data.error;
+      } catch {
+        // respuesta no JSON
+      }
+      throw new Error(message);
+    }
+
+    const contentType = res.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("application/pdf")) {
+      throw new Error("La respuesta no fue un PDF. Intenta de nuevo.");
+    }
+
+    const blob = await res.blob();
+    if (blob.size === 0) {
+      throw new Error("El PDF llegó vacío. Intenta de nuevo.");
+    }
+
+    const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
+    triggerBlobDownload(blob, filename);
+  } catch (err) {
+    window.clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("La generación tardó demasiado. Intenta de nuevo.");
+    }
+    throw err;
+  }
 }
 
 export default function ProposalPdfGenerator() {
@@ -92,50 +189,16 @@ export default function ProposalPdfGenerator() {
     setErrorMsg("");
 
     const url = buildPdfUrl(selected);
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
 
     try {
-      const res = await fetch(url, { signal: controller.signal });
-      window.clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        let message = `Error ${res.status}`;
-        try {
-          const data = (await res.json()) as { error?: string };
-          if (data.error) message = data.error;
-        } catch {
-          // respuesta no JSON
-        }
-        setErrorMsg(message);
-        setStatus("error");
-        return;
+      if (isEmbeddedInFrame()) {
+        await downloadViaHiddenFrame(url);
+      } else {
+        await downloadViaFetch(url);
       }
-
-      const contentType = res.headers.get("Content-Type") ?? "";
-      if (!contentType.includes("application/pdf")) {
-        setErrorMsg("La respuesta no fue un PDF. Intenta de nuevo.");
-        setStatus("error");
-        return;
-      }
-
-      const blob = await res.blob();
-      if (blob.size === 0) {
-        setErrorMsg("El PDF llegó vacío. Intenta de nuevo.");
-        setStatus("error");
-        return;
-      }
-
-      const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
-      triggerBlobDownload(blob, filename);
       setStatus("idle");
     } catch (err) {
-      window.clearTimeout(timeoutId);
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setErrorMsg("La generación tardó demasiado. Intenta de nuevo.");
-      } else {
-        setErrorMsg("No se pudo generar el PDF. Intenta de nuevo.");
-      }
+      setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
       setStatus("error");
     }
   }
