@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 
-type Status = "idle" | "loading" | "error";
+type Status = "idle" | "loading" | "error" | "ready";
 
 const DOWNLOAD_TIMEOUT_MS = 90_000;
 
@@ -15,6 +15,9 @@ const fieldClasses =
   "shadow-[0_1px_2px_rgba(15,15,15,0.04)] outline-none transition " +
   "focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
+
+const buttonClasses =
+  "inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70";
 
 function Spinner() {
   return (
@@ -27,11 +30,6 @@ function Spinner() {
 
 function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
-}
-
-function buildPdfAbsoluteUrl(pageId: string): string {
-  if (typeof window === "undefined") return buildPdfUrl(pageId);
-  return `${window.location.origin}${buildPdfUrl(pageId)}`;
 }
 
 function isEmbeddedInFrame(): boolean {
@@ -60,7 +58,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
   anchor.download = filename;
-  anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -75,7 +72,7 @@ export default function ProposalPdfGenerator() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [embedded, setEmbedded] = useState(false);
-  const [pdfAbsoluteUrl, setPdfAbsoluteUrl] = useState("");
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
 
   const generating = status === "loading";
 
@@ -84,12 +81,10 @@ export default function ProposalPdfGenerator() {
   }, []);
 
   useEffect(() => {
-    if (!selected) {
-      setPdfAbsoluteUrl("");
-      return;
-    }
-    setPdfAbsoluteUrl(buildPdfAbsoluteUrl(selected));
-  }, [selected]);
+    return () => {
+      if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
+    };
+  }, [pdfPreview]);
 
   useEffect(() => {
     let active = true;
@@ -115,10 +110,25 @@ export default function ProposalPdfGenerator() {
     };
   }, []);
 
+  function clearPreview() {
+    setPdfPreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }
+
+  function handleSelectionChange(pageId: string) {
+    setSelected(pageId);
+    clearPreview();
+    setStatus("idle");
+    setErrorMsg("");
+  }
+
   async function handleDownload() {
     if (!selected || generating) return;
     setStatus("loading");
     setErrorMsg("");
+    clearPreview();
 
     const url = buildPdfUrl(selected);
     const controller = new AbortController();
@@ -156,6 +166,15 @@ export default function ProposalPdfGenerator() {
       }
 
       const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
+
+      if (embedded) {
+        // En iframe de Notion no se puede forzar descarga automática; se muestra aquí.
+        const previewUrl = URL.createObjectURL(blob);
+        setPdfPreview({ url: previewUrl, filename });
+        setStatus("ready");
+        return;
+      }
+
       triggerBlobDownload(blob, filename);
       setStatus("idle");
     } catch (err) {
@@ -188,7 +207,7 @@ export default function ProposalPdfGenerator() {
             id="propuesta-select"
             value={selected}
             disabled={generating}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => handleSelectionChange(e.target.value)}
             className={fieldClasses}
           >
             {propuestas.map((p) => (
@@ -201,12 +220,12 @@ export default function ProposalPdfGenerator() {
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
           {embedded
-            ? "Desde Notion, el PDF se genera y descarga en una pestaña nueva del navegador."
+            ? "Genera el PDF aquí y guárdalo con el botón de abajo. La primera vez puede tardar hasta 60 segundos."
             : "Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta 60 segundos."}
         </p>
       </div>
 
-      {generating && !embedded && (
+      {generating && (
         <p className="text-sm text-[#787774]">
           Generando el PDF… puede tardar hasta 60 segundos la primera vez.
         </p>
@@ -218,32 +237,32 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      {embedded ? (
-        <a
-          href={pdfAbsoluteUrl || undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-disabled={!selected || propuestas.length === 0}
-          className={
-            "inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] " +
-            (!selected || propuestas.length === 0
-              ? "pointer-events-none cursor-not-allowed opacity-70"
-              : "")
-          }
-        >
-          Descargar PDF
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={generating || !selected || propuestas.length === 0}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {generating && <Spinner />}
-          {generating ? "Generando PDF…" : "Descargar PDF"}
-        </button>
+      {pdfPreview && (
+        <div className="space-y-3">
+          <embed
+            src={pdfPreview.url}
+            type="application/pdf"
+            className="h-[min(480px,60vh)] w-full rounded-md border border-[#efefef]"
+            title="Vista previa del PDF"
+          />
+          <a href={pdfPreview.url} download={pdfPreview.filename} className={buttonClasses}>
+            Guardar PDF
+          </a>
+          <p className="text-xs text-[#9b9a97]">
+            Si el botón no descarga, usa el icono de descarga del visor del PDF.
+          </p>
+        </div>
       )}
+
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={generating || !selected || propuestas.length === 0}
+        className={buttonClasses}
+      >
+        {generating && <Spinner />}
+        {generating ? "Generando PDF…" : pdfPreview ? "Regenerar PDF" : "Descargar PDF"}
+      </button>
     </div>
   );
 }
