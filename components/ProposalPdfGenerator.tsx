@@ -30,20 +30,12 @@ function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
 }
 
-function toAbsoluteUrl(path: string): string {
-  if (typeof window === "undefined") return path;
-  return new URL(path, window.location.origin).href;
-}
-
-/** Detecta embed de Notion u otro iframe donde fetch+blob suele fallar o colgar. */
-function detectEmbedded(): boolean {
+function isEmbeddedInFrame(): boolean {
   try {
-    if (window.self !== window.top) return true;
+    return window.self !== window.top;
   } catch {
     return true;
   }
-  const ref = document.referrer.toLowerCase();
-  return ref.includes("notion.so") || ref.includes("notion.site");
 }
 
 function parseFilenameFromDisposition(header: string): string {
@@ -67,21 +59,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-}
-
-/**
- * Abre la URL del API en pestaña nueva con clic sintético en <a>.
- * Más fiable que fetch+blob o iframe oculto dentro del sandbox de Notion.
- */
-function openPdfInNewTab(path: string): void {
-  const href = toAbsoluteUrl(path);
-  const anchor = document.createElement("a");
-  anchor.href = href;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
 }
 
 async function downloadViaFetch(url: string): Promise<void> {
@@ -124,6 +101,31 @@ async function downloadViaFetch(url: string): Promise<void> {
   }
 }
 
+/** En embed de Notion el sandbox puede bloquear descargas por blob; abrir la API en pestaña nueva. */
+function downloadViaNewTab(url: string): void {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    throw new Error(
+      "No se pudo abrir la descarga. Permite ventanas emergentes o abre el portal fuera del embed de Notion."
+    );
+  }
+}
+
+/**
+ * Intenta fetch+blob (funciona fuera de Notion y a menudo dentro del embed).
+ * Si falla en iframe, abre la URL del API en una pestaña nueva (Content-Disposition del servidor).
+ */
+async function downloadPdf(url: string): Promise<"blob" | "tab"> {
+  try {
+    await downloadViaFetch(url);
+    return "blob";
+  } catch (err) {
+    if (!isEmbeddedInFrame()) throw err;
+    downloadViaNewTab(url);
+    return "tab";
+  }
+}
+
 export default function ProposalPdfGenerator() {
   const [propuestas, setPropuestas] = useState<PropuestaListItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -131,15 +133,8 @@ export default function ProposalPdfGenerator() {
   const [selected, setSelected] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [embedded, setEmbedded] = useState(false);
 
   const generating = status === "loading";
-  const pdfPath = selected ? buildPdfUrl(selected) : "";
-  const pdfAbsoluteUrl = pdfPath ? toAbsoluteUrl(pdfPath) : "";
-
-  useEffect(() => {
-    setEmbedded(detectEmbedded());
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -167,21 +162,14 @@ export default function ProposalPdfGenerator() {
 
   async function handleDownload() {
     if (!selected || generating) return;
+    setStatus("loading");
     setErrorMsg("");
 
     const url = buildPdfUrl(selected);
 
-    // En Notion embed: no usar fetch (puede colgar 90–130 s). El API responde con Content-Disposition.
-    if (embedded) {
-      openPdfInNewTab(url);
-      setStatus("opened_tab");
-      return;
-    }
-
-    setStatus("loading");
     try {
-      await downloadViaFetch(url);
-      setStatus("idle");
+      const mode = await downloadPdf(url);
+      setStatus(mode === "tab" ? "opened_tab" : "idle");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
       setStatus("error");
@@ -219,9 +207,8 @@ export default function ProposalPdfGenerator() {
           </select>
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
-          {embedded
-            ? "En Notion se abre una pestaña nueva para generar y descargar el PDF (hasta 2 min la primera vez)."
-            : "Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta 2 minutos."}
+          Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta
+          2 minutos.
         </p>
       </div>
 
@@ -233,41 +220,13 @@ export default function ProposalPdfGenerator() {
 
       {status === "opened_tab" && (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Se abrió una pestaña nueva. Espera ahí hasta que termine la descarga (puede tardar 1–2 minutos).
-          {pdfAbsoluteUrl ? (
-            <>
-              {" "}
-              Si no se abrió,{" "}
-              <a
-                href={pdfAbsoluteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-[#2383e2] underline"
-              >
-                haz clic aquí para generar el PDF
-              </a>
-              .
-            </>
-          ) : null}
+          Se abrió una pestaña nueva con el PDF. Si no la ves, permite ventanas emergentes para este sitio.
         </div>
       )}
 
       {status === "error" && (
         <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
           {errorMsg}
-          {pdfAbsoluteUrl ? (
-            <>
-              {" "}
-              <a
-                href={pdfAbsoluteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium underline"
-              >
-                Probar enlace directo
-              </a>
-            </>
-          ) : null}
         </div>
       )}
 
@@ -278,17 +237,8 @@ export default function ProposalPdfGenerator() {
         className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
       >
         {generating && <Spinner />}
-        {generating ? "Generando PDF…" : embedded ? "Generar PDF (pestaña nueva)" : "Descargar PDF"}
+        {generating ? "Generando PDF…" : "Descargar PDF"}
       </button>
-
-      {embedded && selected && pdfAbsoluteUrl ? (
-        <p className="text-center text-xs text-[#9b9a97]">
-          <a href={pdfAbsoluteUrl} target="_blank" rel="noopener noreferrer" className="text-[#2383e2] underline">
-            Enlace directo al PDF
-          </a>{" "}
-          si el botón no funciona
-        </p>
-      ) : null}
     </div>
   );
 }
