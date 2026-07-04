@@ -111,7 +111,7 @@ const SKIP_SECTIONS = new Set(["metadatos de la propuesta", "manticore labs", "i
 
 function isSkipHeading(text: string): boolean {
   const n = normalize(text);
-  return SKIP_SECTIONS.has(n) || /^propuesta\b/.test(n);
+  return SKIP_SECTIONS.has(n) || /^propuesta\b/.test(n) || n.includes("propuesta tecnica");
 }
 
 export function blocksToHtml(blocks: PropuestaBlock[], allowSkip = false): string {
@@ -124,9 +124,18 @@ export function blocksToHtml(blocks: PropuestaBlock[], allowSkip = false): strin
     const type = block.type;
 
     if (allowSkip && skipping) {
-      if (type === "divider") skipping = false;
-      i++;
-      continue;
+      if (type === "divider") {
+        skipping = false;
+        i++;
+        continue;
+      }
+      const isHeading = type === "heading_1" || type === "heading_2" || type === "heading_3";
+      if (isHeading && !isSkipHeading(blockPlainText(block))) {
+        skipping = false;
+      } else {
+        i++;
+        continue;
+      }
     }
 
     if (type === "heading_1" || type === "heading_2" || type === "heading_3") {
