@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent } from "@/lib/notion-propuesta-list";
-import { parseProposalFromBlocks } from "@/lib/propuesta-pdf/notion-parser";
-import { computeFinancials } from "@/lib/propuesta-pdf/calc";
-import { buildCorporateHtml } from "@/lib/propuesta-pdf/corporate-template";
+import { buildLiteralCorporateHtml } from "@/lib/propuesta-pdf/literal-template";
 import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
 import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
 import { ServiceError } from "@/lib/types";
@@ -52,10 +50,8 @@ export async function GET(request: Request): Promise<Response> {
       validezDias: Number(String(cover.validezDias).replace(/[^0-9]/g, "")) || 45,
     };
 
-    const content = parseProposalFromBlocks(blocks, corporateCover);
-    const financials = computeFinancials(content.actividades);
     const assets = loadCorporateAssets();
-    const html = buildCorporateHtml(content, financials, assets);
+    const html = buildLiteralCorporateHtml(corporateCover, blocks, assets);
     const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
 
     const body = new Uint8Array(pdf);
