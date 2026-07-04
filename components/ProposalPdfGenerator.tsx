@@ -240,7 +240,7 @@ export default function ProposalPdfGenerator() {
 
       {generating && (
         <p className="text-sm text-[#787774]">
-          Generando el PDF… puede tardar hasta 2 minutos la primera vez (Notion + IA + maquetación).
+          Generando el PDF… puede tardar hasta 1 minuto la primera vez (Notion + maquetacion).
         </p>
       )}
 

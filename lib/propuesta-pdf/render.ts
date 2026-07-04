@@ -1,4 +1,5 @@
 import { ServiceError } from "../types";
+import { measurePages, logMeasureReport } from "./measure";
 
 export interface RenderPdfOptions {
   /**
@@ -50,7 +51,7 @@ const RENDER_TIMEOUT_MS = 100_000;
 /** Ruta del binario de Chromium en serverless; se reutiliza entre invocaciones calientes. */
 let cachedExecutablePath: Promise<string> | null = null;
 
-/** Precalienta la descarga/extracción de Chromium en paralelo con Notion o DeepSeek. */
+/** Precalienta la descarga/extraccion de Chromium en paralelo con Notion. */
 export function warmChromiumExecutable(): Promise<string> {
   if (!isServerless()) return resolveLocalExecutable();
   if (!cachedExecutablePath) {
@@ -134,6 +135,13 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
     }
 
     if (options.preferCSSPageSize) {
+      try {
+        const report = await measurePages(page);
+        logMeasureReport(report);
+      } catch (err) {
+        console.warn("[render] No se pudo medir paginas:", err);
+      }
+
       const pdf = await page.pdf({
         printBackground: true,
         preferCSSPageSize: true,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
-import { getPropuestaContent, blocksToText, formatPropuestaPdfDate } from "@/lib/notion-propuesta-list";
-import { buildCorporateContent } from "@/lib/deepseek-propuesta-pdf";
+import { getPropuestaContent } from "@/lib/notion-propuesta-list";
+import { parseProposalFromBlocks } from "@/lib/propuesta-pdf/notion-parser";
 import { computeFinancials } from "@/lib/propuesta-pdf/calc";
 import { buildCorporateHtml } from "@/lib/propuesta-pdf/corporate-template";
 import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
@@ -48,12 +48,11 @@ export async function GET(request: Request): Promise<Response> {
       name: cover.name,
       code: cover.code,
       version: cover.version,
-      fecha: formatPropuestaPdfDate(new Date()),
+      fecha: cover.fecha,
       validezDias: Number(String(cover.validezDias).replace(/[^0-9]/g, "")) || 45,
     };
 
-    const rawText = blocksToText(blocks);
-    const content = await buildCorporateContent(rawText, corporateCover);
+    const content = parseProposalFromBlocks(blocks, corporateCover);
     const financials = computeFinancials(content.actividades);
     const assets = loadCorporateAssets();
     const html = buildCorporateHtml(content, financials, assets);

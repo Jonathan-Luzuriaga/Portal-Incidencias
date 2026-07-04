@@ -261,7 +261,7 @@ ${objetivosHtml(content.objetivos)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>6</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-dynamic">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Descripción de la solución</h2>
         <table class="data-table data-table-solutions">
@@ -274,7 +274,7 @@ ${solutionsRows(content)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>7</span></footer>
     </section>
 
-    <section class="page page-standard page-compact">
+    <section class="page page-standard page-compact page-dynamic">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Personal</h2>
         <p>El personal requerido para las diferentes fases del proyecto, son necesarios ya que se maneja entregas parciales del proyecto, estas entregas son ITERATIVAS incrementales, por lo cual en cada fase cada miembro del equipo realiza partes fundamentales para realizar las entregas a tiempo, con la calidad necesaria.</p>
@@ -297,7 +297,7 @@ ${activitiesRows(content, fin)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>8</span></footer>
     </section>
 
-    <section class="page page-standard">
+    <section class="page page-standard page-dynamic">
       <div class="page-inner page-inner-standard">
         <h2 class="section-title">Requerimientos y tiempos</h2>
         <table class="data-table data-table-requirements">

@@ -304,5 +304,28 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 }
 .doc-footer span { color: #000000; }
 
+/* Paginas con contenido variable: permiten que tablas largas fluyan en lugar de cortarse */
+.page-dynamic {
+  height: auto;
+  min-height: 1122px;
+  overflow: visible;
+  page-break-inside: auto;
+}
+.page-dynamic .page-inner-standard {
+  height: auto;
+  min-height: calc(1122px - 36px);
+  overflow: visible;
+}
+.page-dynamic .data-table {
+  page-break-inside: auto;
+}
+.page-dynamic .data-table tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.page-dynamic .data-table thead {
+  display: table-header-group;
+}
+
 @page { size: A4; margin: 0; }
 `;
