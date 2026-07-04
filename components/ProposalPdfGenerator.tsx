@@ -233,8 +233,8 @@ export default function ProposalPdfGenerator() {
           </select>
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
-          Selecciona una propuesta y descárgala con el formato corporativo. La primera descarga puede tardar hasta
-          2 minutos.
+          Selecciona una propuesta y descargala con el formato corporativo. La primera descarga puede tardar hasta
+          1 minuto.
         </p>
       </div>
 
@@ -246,7 +246,7 @@ export default function ProposalPdfGenerator() {
 
       {status === "opened_tab" && (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Se abrió una pestaña para generar y descargar el PDF. Espera 1–2 minutos hasta que termine.
+          Se abrio una pestana para generar y descargar el PDF. Espera hasta 1 minuto.
           {pdfAbsoluteUrl ? (
             <>
               {" "}
