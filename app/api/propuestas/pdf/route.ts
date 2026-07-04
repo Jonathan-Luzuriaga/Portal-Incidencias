@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent } from "@/lib/notion-propuesta-list";
-import { buildLiteralCorporateHtml } from "@/lib/propuesta-pdf/literal-template";
+import { buildSmartCorporateHtml } from "@/lib/propuesta-pdf/deepseek-html-generator";
 import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
 import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
 import { ServiceError } from "@/lib/types";
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
     };
 
     const assets = loadCorporateAssets();
-    const html = buildLiteralCorporateHtml(corporateCover, blocks, assets);
+    const html = await buildSmartCorporateHtml(corporateCover, blocks, assets);
     const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
 
     const body = new Uint8Array(pdf);
