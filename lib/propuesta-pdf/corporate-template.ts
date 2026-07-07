@@ -270,13 +270,8 @@ ${objetivosHtml(content.objetivos)}
 ${solutionsRows(content)}
           </tbody>
         </table>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>7</span></footer>
-    </section>
 
-    <section class="page page-standard page-compact page-dynamic">
-      <div class="page-inner page-inner-standard">
-        <h2 class="section-title">Personal</h2>
+        <h2 class="section-title section-gap-large">Personal</h2>
         <p>El personal requerido para las diferentes fases del proyecto, son necesarios ya que se maneja entregas parciales del proyecto, estas entregas son ITERATIVAS incrementales, por lo cual en cada fase cada miembro del equipo realiza partes fundamentales para realizar las entregas a tiempo, con la calidad necesaria.</p>
         <table class="data-table data-table-personal">
           <thead><tr><th>Rol</th><th>Cantidad</th><th>Descripción del Rol</th></tr></thead>
@@ -284,7 +279,12 @@ ${solutionsRows(content)}
 ${personalRows(content)}
           </tbody>
         </table>
+      </div>
+      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>7</span></footer>
+    </section>
 
+    <section class="page page-standard page-compact page-dynamic">
+      <div class="page-inner page-inner-standard">
         <p class="note-inline"><strong>NOTA:</strong> Manticore Labs no se responsabiliza por despliegues ni problemas presentados en ambientes del cliente. En caso de tener un flujo DevOps Manticore Labs brindará los comandos para levantar el aplicativo pero no será responsable de implementar nuevos flujos ni tampoco de problemas de ambiente que se tengan durante el despliegue. Manticore Labs es responsable del código y lógica de negocio escrita en el mismo.</p>
         <h2 class="section-title section-gap-medium">Actividades</h2>
         <table class="data-table data-table-activities">

@@ -15,31 +15,61 @@ function isServerless(): boolean {
   return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.AWS_REGION);
 }
 
-const WINDOWS_CHROME_PATHS = [
-  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+type BrowserLaunchProfile = {
+  executablePath: string;
+  args: string[];
+  headless: boolean | "shell";
+};
+
+function joinWin(...parts: string[]): string {
+  return parts.join("\\");
+}
+
+/** Rutas habituales de Chrome, Edge, Brave y Chromium en Windows (incluye instalaciones x86 y por usuario). */
+function getWindowsBrowserPaths(): string[] {
+  const programFiles = process.env.ProgramFiles;
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  const localAppData = process.env.LOCALAPPDATA;
+  const candidates: string[] = [];
+
+  const chromeRel = ["Google", "Chrome", "Application", "chrome.exe"];
+  const edgeRel = ["Microsoft", "Edge", "Application", "msedge.exe"];
+  const braveRel = ["BraveSoftware", "Brave-Browser", "Application", "brave.exe"];
+  const chromiumRel = ["Chromium", "Application", "chrome.exe"];
+
+  for (const root of [programFiles, programFilesX86, localAppData]) {
+    if (!root) continue;
+    candidates.push(
+      joinWin(root, ...chromeRel),
+      joinWin(root, ...edgeRel),
+      joinWin(root, ...braveRel),
+      joinWin(root, ...chromiumRel)
+    );
+  }
+
+  return [...new Set(candidates)];
+}
+
+const UNIX_BROWSER_PATHS = [
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+  "/snap/bin/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+  "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
 ];
 
-async function resolveLocalExecutable(): Promise<string> {
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+async function findSystemBrowserExecutable(): Promise<string | null> {
+  if (process.env.CHROME_PATH?.trim()) return process.env.CHROME_PATH.trim();
+
   const { existsSync } = await import("fs");
-  for (const p of WINDOWS_CHROME_PATHS) {
+  const paths = process.platform === "win32" ? getWindowsBrowserPaths() : UNIX_BROWSER_PATHS;
+  for (const p of paths) {
     if (existsSync(p)) return p;
   }
-  const unixPaths = [
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  ];
-  for (const p of unixPaths) {
-    if (existsSync(p)) return p;
-  }
-  throw new ServiceError(
-    "No se encontró Chrome para generar el PDF en local. Define CHROME_PATH con la ruta al ejecutable de Chrome.",
-    500
-  );
+  return null;
 }
 
 const CHROMIUM_PACK_URL =
@@ -48,19 +78,54 @@ const CHROMIUM_PACK_URL =
 
 const RENDER_TIMEOUT_MS = 100_000;
 
-/** Ruta del binario de Chromium en serverless; se reutiliza entre invocaciones calientes. */
-let cachedExecutablePath: Promise<string> | null = null;
+/** Binario empaquetado (Vercel o fallback local); se reutiliza entre invocaciones. */
+let cachedBundledExecutablePath: Promise<string> | null = null;
 
-/** Precalienta la descarga/extraccion de Chromium en paralelo con Notion. */
-export function warmChromiumExecutable(): Promise<string> {
-  if (!isServerless()) return resolveLocalExecutable();
-  if (!cachedExecutablePath) {
-    cachedExecutablePath = (async () => {
+async function resolveBundledExecutablePath(): Promise<string> {
+  if (!cachedBundledExecutablePath) {
+    cachedBundledExecutablePath = (async () => {
       const chromium = (await import("@sparticuz/chromium-min")).default;
       return chromium.executablePath(CHROMIUM_PACK_URL);
     })();
   }
-  return cachedExecutablePath;
+  return cachedBundledExecutablePath;
+}
+
+async function resolveBundledLaunchProfile(): Promise<BrowserLaunchProfile> {
+  const chromium = (await import("@sparticuz/chromium-min")).default;
+  const puppeteer = (await import("puppeteer-core")).default;
+  const executablePath = await resolveBundledExecutablePath();
+  const args = await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
+  return { executablePath, args, headless: "shell" };
+}
+
+async function resolveBrowserLaunchProfile(options: RenderPdfOptions = {}): Promise<BrowserLaunchProfile> {
+  if (isServerless()) {
+    const profile = await resolveBundledLaunchProfile();
+    return {
+      ...profile,
+      executablePath: options.executablePath ?? profile.executablePath,
+    };
+  }
+
+  const systemExecutable = await findSystemBrowserExecutable();
+  if (systemExecutable) {
+    return {
+      executablePath: systemExecutable,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      headless: true,
+    };
+  }
+
+  console.warn(
+    "[render] No se encontró Chrome/Edge/Brave en el sistema; usando Chromium empaquetado para generar el PDF."
+  );
+  return resolveBundledLaunchProfile();
+}
+
+/** Precalienta el navegador en paralelo con Notion (sistema o Chromium empaquetado). */
+export function warmChromiumExecutable(): Promise<string> {
+  return resolveBrowserLaunchProfile().then((profile) => profile.executablePath);
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -100,22 +165,8 @@ async function launchWithRetry(
 }
 
 async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
-  const serverless = isServerless();
   const puppeteer = (await import("puppeteer-core")).default;
-
-  let executablePath: string;
-  let args: string[];
-  let headless: boolean | "shell" = true;
-
-  if (serverless) {
-    const chromium = (await import("@sparticuz/chromium-min")).default;
-    executablePath = options.executablePath ?? (await warmChromiumExecutable());
-    args = await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" });
-    headless = "shell";
-  } else {
-    executablePath = await resolveLocalExecutable();
-    args = ["--no-sandbox", "--disable-setuid-sandbox"];
-  }
+  const { executablePath, args, headless } = await resolveBrowserLaunchProfile(options);
 
   const browser = await launchWithRetry(puppeteer, { args, executablePath, headless });
   try {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent } from "@/lib/notion-propuesta-list";
-import { buildSmartCorporateHtml } from "@/lib/propuesta-pdf/deepseek-html-generator";
+import { buildStandardCorporatePdfHtml } from "@/lib/propuesta-pdf/build-corporate-pdf";
 import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
 import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
 import { ServiceError } from "@/lib/types";
@@ -19,7 +19,6 @@ function sanitizeFilename(input: string): string {
   return base.slice(0, 120) || "Propuesta";
 }
 
-/** Content-Disposition con soporte UTF-8 (RFC 5987) para títulos con guiones largos, tildes, etc. */
 function buildContentDisposition(title: string): string {
   const utf8Filename = `${sanitizeFilename(title)}.pdf`;
   const asciiFilename = utf8Filename
@@ -51,7 +50,7 @@ export async function GET(request: Request): Promise<Response> {
     };
 
     const assets = loadCorporateAssets();
-    const html = await buildSmartCorporateHtml(corporateCover, blocks, assets);
+    const html = await buildStandardCorporatePdfHtml(blocks, corporateCover, assets);
     const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
 
     const body = new Uint8Array(pdf);

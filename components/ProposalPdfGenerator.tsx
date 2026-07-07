@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
+import { PROPUESTA_STANDARD_GUIDE } from "@/lib/propuesta-pdf/propuesta-standardize";
 
 type Status = "idle" | "loading" | "error" | "opened_tab";
 
-/** Debe superar maxDuration del API (120 s) con margen. */
 const DOWNLOAD_TIMEOUT_MS = 130_000;
 
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
@@ -35,7 +35,6 @@ function toAbsoluteUrl(path: string): string {
   return new URL(path, window.location.origin).href;
 }
 
-/** true si la página corre dentro de un iframe (p. ej. embed de Notion con sandbox). */
 function isEmbeddedInFrame(): boolean {
   try {
     return window.self !== window.top;
@@ -50,7 +49,7 @@ function parseFilenameFromDisposition(header: string): string {
     try {
       return decodeURIComponent(utf8Match);
     } catch {
-      // continuar con filename ASCII
+      // continuar
     }
   }
   return header.match(/filename="([^"]+)"/)?.[1] ?? "Propuesta.pdf";
@@ -67,7 +66,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-/** En iframe sandboxed (Notion) blob/download está bloqueado; el API con Content-Disposition sí descarga en pestaña nueva. */
 function openPdfDownload(path: string): void {
   const href = toAbsoluteUrl(path);
   const anchor = document.createElement("a");
@@ -122,7 +120,6 @@ async function downloadViaFetch(url: string): Promise<void> {
   }
 }
 
-/** Descarga directa fuera de iframe; en Notion embed abre el API en pestaña nueva. */
 async function downloadPdf(url: string): Promise<"blob" | "tab"> {
   if (isEmbeddedInFrame()) {
     openPdfDownload(url);
@@ -138,6 +135,38 @@ async function downloadPdf(url: string): Promise<"blob" | "tab"> {
     }
     throw err;
   }
+}
+
+function StandardGuidePanel() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-md border border-[#efefef] bg-[#fafafa]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-medium text-[#37352f]"
+      >
+        <span>{PROPUESTA_STANDARD_GUIDE.title}</span>
+        <span className="text-xs text-[#9b9a97]">{open ? "Ocultar" : "Mostrar"}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-[#efefef] px-3 py-3 text-sm text-[#787774]">
+          <p>{PROPUESTA_STANDARD_GUIDE.intro}</p>
+          <ul className="list-inside list-disc space-y-0.5 text-xs">
+            {PROPUESTA_STANDARD_GUIDE.sections.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+          <ol className="list-inside list-decimal space-y-1 text-xs">
+            {PROPUESTA_STANDARD_GUIDE.notionSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ProposalPdfGenerator() {
@@ -204,6 +233,8 @@ export default function ProposalPdfGenerator() {
 
   return (
     <div className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5">
+      <StandardGuidePanel />
+
       <div>
         <label htmlFor="propuesta-select" className={labelClasses}>
           Propuesta
@@ -233,20 +264,20 @@ export default function ProposalPdfGenerator() {
           </select>
         )}
         <p className="mt-1.5 text-xs text-[#9b9a97]">
-          Selecciona una propuesta y descargala con el formato corporativo. La primera descarga puede tardar hasta
-          1 minuto.
+          El PDF se genera con la plantilla corporativa fija: tablas estándar, 9 actividades, precios
+          calculados automáticamente.
         </p>
       </div>
 
       {generating && (
         <p className="text-sm text-[#787774]">
-          Generando el PDF… puede tardar hasta 1 minuto la primera vez (Notion + maquetacion).
+          Normalizando contenido y generando PDF… puede tardar hasta 1 minuto la primera vez.
         </p>
       )}
 
       {status === "opened_tab" && (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Se abrio una pestana para generar y descargar el PDF. Espera hasta 1 minuto.
+          Se abrió una pestaña para generar y descargar el PDF. Espera hasta 1 minuto.
           {pdfAbsoluteUrl ? (
             <>
               {" "}
@@ -261,7 +292,7 @@ export default function ProposalPdfGenerator() {
       )}
 
       {status === "error" && (
-        <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
+        <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a] whitespace-pre-wrap">
           {errorMsg}
         </div>
       )}

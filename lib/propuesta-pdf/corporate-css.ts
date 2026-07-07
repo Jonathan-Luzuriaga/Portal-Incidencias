@@ -218,6 +218,7 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 .data-table tr { page-break-inside: avoid; break-inside: avoid; }
 .data-table th, .data-table td { border: 1px solid var(--line); padding: 5px 7px; vertical-align: top; font-size: 12px; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; hyphens: auto; }
 .data-table th { background: var(--teal); color: #ffffff; font-weight: 700; text-align: left; }
+.data-table-solutions th:nth-child(2) { white-space: nowrap; hyphens: none; overflow-wrap: normal; word-break: normal; }
 .data-table-roles { width: 100%; }
 
 .data-table-personal th:nth-child(1), .data-table-personal td:nth-child(1) { width: 28%; }
