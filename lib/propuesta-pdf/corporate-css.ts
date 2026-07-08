@@ -340,5 +340,60 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
   display: table-header-group;
 }
 
+.page-flow-chunk {
+  height: 1122px !important;
+  min-height: 1122px !important;
+  position: relative;
+  overflow: hidden;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  break-before: page;
+  page-break-before: always;
+}
+.page-flow-chunk:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.page-flow-chunk.page-standard::before {
+  height: 561px;
+}
+.page-flow-chunk.page-standard::after {
+  height: 561px;
+}
+.page-flow-chunk .page-inner-standard {
+  height: calc(100% - 36px);
+  overflow: hidden;
+}
+.page-flow-chunk .page-inner-standard p,
+.page-flow-chunk .page-inner-standard li,
+.page-flow-chunk .page-inner-standard blockquote {
+  font-size: 13px;
+  line-height: 1.45;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.page-flow-chunk .page-inner-standard .section-title {
+  font-size: 15px;
+  font-family: "Montserrat", Arial, Helvetica, sans-serif;
+  font-weight: 700;
+}
+.page-flow-chunk .page-inner-standard .subsection-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #000000;
+}
+.page-flow-chunk .page-inner-standard .data-table th,
+.page-flow-chunk .page-inner-standard .data-table td {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.page-flow-chunk .page-inner-standard ul,
+.page-flow-chunk .page-inner-standard ol {
+  margin: 0 0 8px 18px;
+  padding-left: 16px;
+}
+.page-flow-chunk .page-inner-standard li {
+  margin-bottom: 4px;
+}
+
 @page { size: A4; margin: 0; }
 `;

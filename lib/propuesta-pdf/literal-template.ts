@@ -27,6 +27,43 @@ function objetivosHtml(objetivos: string[]): string {
   return items.map((o) => `<li>${esc(o)}</li>`).join("\n");
 }
 
+function docFooter(pageNum: number): string {
+  return `<footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>${pageNum}</span></footer>`;
+}
+
+/** Fuente sin paginar; paginateProposalFlow() la convierte en páginas A4 en render.ts */
+const PROPOSAL_FLOW_CSS = `
+.proposal-flow {
+  width: 794px;
+  box-sizing: border-box;
+  padding: 54px 80px 0 60px;
+}
+.proposal-flow .section-title,
+.proposal-flow .subsection-title {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.proposal-flow p,
+.proposal-flow li {
+  orphans: 3;
+  widows: 3;
+}
+.page-flow-tall {
+  height: auto !important;
+  min-height: 1122px !important;
+  overflow: visible;
+  page-break-inside: auto;
+  break-inside: auto;
+}
+.page-flow-tall .page-inner-standard {
+  height: auto !important;
+  overflow: visible;
+}
+.page-flow-tall .data-table {
+  page-break-inside: auto;
+}
+`;
+
 function buildFixedPages(
   c: CorporateCover,
   assets: Record<AssetName, string>,
@@ -81,6 +118,7 @@ function buildFixedPages(
           </tbody>
         </table>
       </div>
+      ${docFooter(2)}
     </section>
 
     <section class="page page-standard page-quote">
@@ -91,6 +129,7 @@ function buildFixedPages(
           <p class="quote-author">STEVE JOBS</p>
         </div>
       </div>
+      ${docFooter(3)}
     </section>
 
     <section class="page page-standard page-compact">
@@ -115,6 +154,7 @@ ${objetivosHtml(objetivos)}
           <li><strong>Operaciones</strong><ul><li>Se revisa que el proceso haya culminado satisfactoriamente en el ambiente deseado</li></ul></li>
         </ul>
       </div>
+      ${docFooter(4)}
     </section>
 
     <section class="page page-standard page-compact">
@@ -145,6 +185,7 @@ ${objetivosHtml(objetivos)}
         <p>La responsabilidad del Scrum Master es unir todo y garantizar que el proceso de SCRUM se haga bien. En términos prácticos, eso significa que ayudan al product owner a definir el valor, al equipo de desarrollo a entregar el valor y al equipo de scrum a mejorar.</p>
         <p>La responsabilidad del equipo de desarrollo es llevar a cabo el desarrollo, implementación y despliegue del aplicativo, así cómo la solución de cualquier tipo de errores que se tenga.</p>
       </div>
+      ${docFooter(5)}
     </section>
 
     <section class="page page-standard page-compact">
@@ -157,6 +198,7 @@ ${objetivosHtml(objetivos)}
           <figcaption><strong>Imagen 4 -</strong> Diagrama de costo del cambio</figcaption>
         </figure>
       </div>
+      ${docFooter(6)}
     </section>`;
 }
 
@@ -165,9 +207,7 @@ function buildDynamicFlow(blocks: PropuestaBlock[]): string {
   if (!inner.trim()) return "";
 
   return `
-    <div class="proposal-flow-print page-inner-standard">
-      <div class="flow-print-deco-navy" aria-hidden="true"></div>
-      <div class="flow-print-deco-gold" aria-hidden="true"></div>
+    <div class="proposal-flow">
 ${inner}
     </div>`;
 }
@@ -195,6 +235,7 @@ export function buildLiteralCorporateHtml(
   <title>Manticore Labs - Propuesta ${esc(cover.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>${CORPORATE_CSS}</style>
+  <style>${PROPOSAL_FLOW_CSS}</style>
   <style>${PROPOSAL_FLOW_PRINT_CSS}</style>
 </head>
 <body>

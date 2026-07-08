@@ -44,11 +44,15 @@ function normalize(text: string): string {
     .trim();
 }
 
+function cleanDisplayText(text: string): string {
+  return text.replace(/^\\+\s*/, "");
+}
+
 export function richTextToHtml(richText: NotionRichText[] | undefined): string {
   if (!richText || richText.length === 0) return "";
   return richText
     .map((rt) => {
-      const raw = rt.plain_text ?? "";
+      const raw = cleanDisplayText(rt.plain_text ?? "");
       if (!raw) return "";
       let html = escapeHtml(raw);
       const a = rt.annotations ?? {};
@@ -111,6 +115,43 @@ function looksLikeHeaderRow(cells: NotionRichText[][]): boolean {
   return /descripción|descripcion|precio|rol|cantidad|etapa|actividad|tiempo|módulo|modulo|#/.test(
     joined
   );
+}
+
+const FIELD_LABELS = new Set([
+  "rol",
+  "necesidad",
+  "beneficio esperado",
+  "alcance considerado",
+  "criterios de aceptacion principales",
+  "criterios de aceptacion",
+]);
+
+function isHuHeading(text: string): boolean {
+  return /^HU\s*\d+/i.test(text.trim());
+}
+
+function isHeadingBlock(block: PropuestaBlock): boolean {
+  return block.type === "heading_1" || block.type === "heading_2" || block.type === "heading_3";
+}
+
+/** Párrafo etiqueta (p. ej. «Beneficio esperado:») que debe ir con el bloque siguiente. */
+function isFieldLabelBlock(block: PropuestaBlock): boolean {
+  if (block.type !== "paragraph") return false;
+  const plain = blockPlainText(block);
+  if (!plain.endsWith(":") || plain.length > 100) return false;
+  const label = normalize(plain.replace(/:$/, ""));
+  if (FIELD_LABELS.has(label)) return true;
+  return plain.length <= 60 && /^[A-Za-zÁÉÍÓÚáéíóúÑñüÜ0-9\s().–-]+:$/.test(plain);
+}
+
+function sliceHasLongContent(blocks: PropuestaBlock[]): boolean {
+  let paragraphs = 0;
+  let listItems = 0;
+  for (const block of blocks) {
+    if (block.type === "paragraph") paragraphs++;
+    if (block.type === "bulleted_list_item" || block.type === "numbered_list_item") listItems++;
+  }
+  return paragraphs > 2 || listItems > 5;
 }
 
 function tableToHtml(block: PropuestaBlock): string {
@@ -208,12 +249,38 @@ export function blocksToHtml(blocks: PropuestaBlock[], allowSkip = false): strin
         continue;
       }
       const inner = richTextToHtml(blockRichText(block));
+      const huClass = isHuHeading(text) ? " hu-title" : "";
       if (type === "heading_3") {
-        parts.push(`<h3 class="subsection-title">${inner}</h3>`);
+        parts.push(`<h3 class="subsection-title${huClass}">${inner}</h3>`);
       } else {
-        parts.push(`<h2 class="section-title">${inner}</h2>`);
+        parts.push(`<h2 class="section-title${huClass}">${inner}</h2>`);
       }
       i++;
+      continue;
+    }
+
+    if (isFieldLabelBlock(block)) {
+      const labelInner = richTextToHtml(blockRichText(block));
+      let j = i + 1;
+      while (j < blocks.length) {
+        const next = blocks[j];
+        if (
+          isFieldLabelBlock(next) ||
+          isHeadingBlock(next) ||
+          next.type === "divider" ||
+          next.type === "table"
+        ) {
+          break;
+        }
+        j++;
+      }
+      const contentBlocks = blocks.slice(i + 1, j);
+      const contentHtml = contentBlocks.length > 0 ? blocksToHtml(contentBlocks, false) : "";
+      const loose = sliceHasLongContent(contentBlocks) ? " field-block-loose" : "";
+      parts.push(
+        `<div class="field-block${loose}"><p class="field-label">${labelInner}</p>${contentHtml}</div>`
+      );
+      i = j;
       continue;
     }
 
