@@ -47,45 +47,15 @@ const PROPOSAL_FLOW_CSS = `
   orphans: 3;
   widows: 3;
 }
-.proposal-flow .data-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0 18px;
-  break-inside: auto;
-  page-break-inside: auto;
-}
-.proposal-flow .data-table tr {
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-.proposal-flow .data-table thead {
-  display: table-header-group;
-}
-.proposal-flow .data-table th,
-.proposal-flow .data-table td {
-  border: 1px solid var(--line);
-  padding: 6px 8px;
-  vertical-align: top;
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-.proposal-flow .data-table th {
-  background: var(--teal);
-  color: #ffffff;
-  font-weight: 700;
-}
-.page-flow-chunk .page-inner-standard {
-  height: calc(100% - 36px);
-  overflow: hidden;
-}
 .page-flow-tall {
-  height: auto;
-  min-height: 1122px;
+  height: auto !important;
+  min-height: 1122px !important;
   overflow: visible;
   page-break-inside: auto;
+  break-inside: auto;
 }
 .page-flow-tall .page-inner-standard {
-  height: auto;
+  height: auto !important;
   overflow: visible;
 }
 .page-flow-tall .data-table {

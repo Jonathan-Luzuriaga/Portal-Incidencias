@@ -1,46 +1,60 @@
 /**
- * Parte el bloque .proposal-flow en páginas A4 (794×1122) con pie corporativo,
- * midiendo altura real en Chromium antes de imprimir.
+ * Parte .proposal-flow en páginas A4 midiendo altura real en Chromium.
+ * Compacta bloques cortos consecutivos para evitar hojas casi vacías.
  */
 import type { Page } from "puppeteer-core";
 
 const FLOW_START_PAGE = 7;
-const PAGE_HEIGHT = 1122;
-/** Área útil dentro de page-inner-standard (padding-top + pie). */
+/** Área útil: 1122px − padding superior − zona del pie absoluto. */
 const MAX_INNER_HEIGHT = 1014;
 
 export async function paginateProposalFlow(page: Page): Promise<void> {
   await page.evaluate(
-    ({ startPage, pageHeight, maxInner }) => {
+    ({ startPage, maxInner }) => {
       const source = document.querySelector(".proposal-flow");
       if (!source) return;
 
-      const elements = Array.from(source.children) as HTMLElement[];
+      let elements = Array.from(source.children) as HTMLElement[];
+      elements = elements.filter((el) => {
+        if (el.tagName.toLowerCase() === "hr" && el.classList.contains("section-divider")) {
+          return false;
+        }
+        return true;
+      });
       if (elements.length === 0) {
         source.remove();
         return;
       }
 
-      const measureHost = document.createElement("div");
-      measureHost.className = "page-inner page-inner-standard proposal-flow-measure";
-      measureHost.style.cssText =
+      const measureRoot = document.createElement("div");
+      measureRoot.className = "proposal-flow";
+      measureRoot.style.cssText =
         "position:absolute;left:-9999px;top:0;width:794px;visibility:hidden;pointer-events:none;";
-      document.body.appendChild(measureHost);
+      const measureHost = document.createElement("div");
+      measureHost.className = "page-inner page-inner-standard";
+      measureRoot.appendChild(measureHost);
+      document.body.appendChild(measureRoot);
 
       function measureNodes(nodes: HTMLElement[]): number {
         measureHost.replaceChildren(...nodes.map((n) => n.cloneNode(true)));
         return measureHost.scrollHeight;
       }
 
+      function isHeading(el: HTMLElement): boolean {
+        const tag = el.tagName.toLowerCase();
+        return tag === "h2" || tag === "h3";
+      }
+
+      function isOversized(el: HTMLElement): boolean {
+        return measureNodes([el]) > maxInner;
+      }
+
+      /** Empaqueta bloques hasta llenar la página. */
       const chunks: HTMLElement[][] = [];
       let current: HTMLElement[] = [];
 
       for (const el of elements) {
-        const tag = el.tagName.toLowerCase();
-        const isHeading = tag === "h2" || tag === "h3";
-        const soloHeight = measureNodes([el]);
-
-        if (soloHeight > maxInner) {
+        if (isOversized(el)) {
           if (current.length > 0) {
             chunks.push(current);
             current = [];
@@ -49,39 +63,54 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
           continue;
         }
 
-        const combined = measureNodes([...current, el]);
-        if (combined > maxInner && current.length > 0) {
+        const withNew = [...current, el];
+        if (current.length > 0 && measureNodes(withNew) > maxInner) {
           chunks.push(current);
           current = [el];
-          continue;
+        } else {
+          current = withNew;
         }
+      }
+      if (current.length > 0) chunks.push(current);
 
-        if (isHeading && current.length > 0) {
-          const withoutLast = current.slice(0, -1);
-          const last = current[current.length - 1];
-          if (withoutLast.length > 0 && measureNodes([...withoutLast, el]) <= maxInner) {
-            chunks.push(withoutLast);
-            current = last ? [last, el] : [el];
-            continue;
+      /** Une páginas consecutivas que quepan juntas (evita hojas de 3 líneas). */
+      let merged = true;
+      while (merged) {
+        merged = false;
+        for (let i = 0; i < chunks.length - 1; i++) {
+          const combined = [...chunks[i], ...chunks[i + 1]];
+          if (measureNodes(combined) <= maxInner) {
+            chunks.splice(i, 2, combined);
+            merged = true;
+            break;
           }
         }
-
-        current.push(el);
       }
 
-      if (current.length > 0) chunks.push(current);
-      measureHost.remove();
+      /** Título solo al final de una hoja → pásalo a la siguiente. */
+      for (let i = 0; i < chunks.length - 1; i++) {
+        const chunk = chunks[i];
+        const last = chunk[chunk.length - 1];
+        if (last && isHeading(last)) {
+          chunks[i + 1] = [last, ...chunks[i + 1]];
+          chunk.pop();
+          if (chunk.length === 0) chunks.splice(i, 1);
+        }
+      }
+
+      measureRoot.remove();
 
       const container = document.createElement("div");
       container.className = "proposal-flow-pages";
 
       let pageNum = startPage;
       for (const chunk of chunks) {
+        if (chunk.length === 0) continue;
+
         const solo = chunk.length === 1 ? chunk[0] : null;
         const tall =
           solo !== null &&
-          (solo.tagName.toLowerCase() === "table" ||
-            measureNodes(chunk) > maxInner);
+          (solo.tagName.toLowerCase() === "table" || measureNodes(chunk) > maxInner);
 
         const section = document.createElement("section");
         section.className = tall
@@ -106,10 +135,6 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
 
       source.replaceWith(container);
     },
-    {
-      startPage: FLOW_START_PAGE,
-      pageHeight: PAGE_HEIGHT,
-      maxInner: MAX_INNER_HEIGHT,
-    }
+    { startPage: FLOW_START_PAGE, maxInner: MAX_INNER_HEIGHT }
   );
 }
