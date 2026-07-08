@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent } from "@/lib/notion-propuesta-list";
-import { buildStandardCorporatePdfHtml } from "@/lib/propuesta-pdf/build-corporate-pdf";
-import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
-import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
+import { buildProposalHtml } from "@/lib/propuesta-pdf/html";
 import { ServiceError } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -41,17 +39,11 @@ export async function GET(request: Request): Promise<Response> {
       warmChromiumExecutable(),
     ]);
 
-    const corporateCover: CorporateCover = {
-      name: cover.name,
-      code: cover.code,
-      version: cover.version,
-      fecha: cover.fecha,
-      validezDias: Number(String(cover.validezDias).replace(/[^0-9]/g, "")) || 45,
-    };
-
-    const assets = loadCorporateAssets();
-    const html = await buildStandardCorporatePdfHtml(blocks, corporateCover, assets);
-    const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
+    // Transcribe fielmente el contenido real de la propuesta en Notion.
+    // No se usa IA ni cálculos: las tablas, horas y precios se toman tal cual
+    // están escritos y aprobados en la página de Notion.
+    const html = buildProposalHtml(cover, blocks);
+    const pdf = await renderHtmlToPdf(html, { executablePath });
 
     const body = new Uint8Array(pdf);
 

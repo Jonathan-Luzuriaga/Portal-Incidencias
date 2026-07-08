@@ -13,7 +13,7 @@ import type {
   TeamProjectOption,
   TeamUserOption,
 } from "./team-types";
-import { getEnsuredTeamUserIds } from "./team-defaults";
+import { getEnsuredTeamUserIds, getKnownTeamUserName, KNOWN_TEAM_USERS } from "./team-defaults";
 import { ServiceError } from "./types";
 
 let cachedTasksDataSourceId: string | null = null;
@@ -284,18 +284,22 @@ async function resolvePersonUser(
   id: string,
   fallbackName?: string | null
 ): Promise<TeamUserOption | null> {
+  const knownName = getKnownTeamUserName(id);
   try {
     const u = await notion.users.retrieve({ user_id: id });
-    if (u.type !== "person") return null;
-    const name = u.name?.trim() || fallbackName?.trim() || "";
+    if (u.type !== "person") {
+      if (knownName) return { id, name: knownName, avatarUrl: null };
+      return null;
+    }
+    const name = u.name?.trim() || fallbackName?.trim() || knownName || "";
     if (!name) return null;
     return {
       id: u.id,
-      name,
+      name: knownName ?? name,
       avatarUrl: u.avatar_url ?? null,
     };
   } catch {
-    const name = fallbackName?.trim();
+    const name = fallbackName?.trim() || knownName;
     if (!name) return null;
     return { id, name, avatarUrl: null };
   }
@@ -333,17 +337,20 @@ async function listExtraAssignees(): Promise<TeamUserOption[]> {
   const users: TeamUserOption[] = [];
 
   for (const id of ids) {
+    const knownName = getKnownTeamUserName(id);
     try {
       const u = await notion.users.retrieve({ user_id: id });
       if (u.type === "person") {
         users.push({
           id: u.id,
-          name: u.name ?? "Usuario",
+          name: knownName ?? u.name ?? "Usuario",
           avatarUrl: u.avatar_url ?? null,
         });
+      } else if (knownName) {
+        users.push({ id, name: knownName, avatarUrl: null });
       }
     } catch {
-      // omitir ids inválidos
+      if (knownName) users.push({ id, name: knownName, avatarUrl: null });
     }
   }
 
@@ -420,6 +427,15 @@ export async function listTeamUsers(): Promise<TeamUserOption[]> {
     const byId = new Map<string, TeamUserOption>();
     for (const u of [...workspace, ...fromTasks, ...extra]) {
       if (!byId.has(u.id)) byId.set(u.id, u);
+    }
+
+    for (const known of KNOWN_TEAM_USERS) {
+      const existing = byId.get(known.id);
+      byId.set(known.id, {
+        id: known.id,
+        name: known.name,
+        avatarUrl: existing?.avatarUrl ?? null,
+      });
     }
 
     const merged = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
