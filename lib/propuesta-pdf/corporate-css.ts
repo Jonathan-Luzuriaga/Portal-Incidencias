@@ -272,6 +272,18 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 .page-last { padding-top: 24px; }
 
 /* SDE-863 — compactación de páginas densas (workflow 4.4) */
+.page-compact {
+  height: auto;
+  min-height: 1122px;
+  overflow: visible;
+  page-break-inside: auto;
+  break-inside: auto;
+}
+.page-compact .page-inner-standard {
+  height: auto;
+  min-height: calc(1122px - 36px);
+  overflow: visible;
+}
 .page-compact .section-title { margin-bottom: 10px; }
 .page-compact .section-gap-medium { margin-top: 16px; }
 .page-compact .subsection-title { margin-top: 8px; margin-bottom: 6px; }
@@ -305,7 +317,7 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 }
 .doc-footer span { color: #000000; }
 
-/* Paginas con contenido variable: permiten que tablas largas fluyan en lugar de cortarse */
+/* Paginas con contenido variable (plantilla estructurada legacy) */
 .page-dynamic {
   height: auto;
   min-height: 1122px;

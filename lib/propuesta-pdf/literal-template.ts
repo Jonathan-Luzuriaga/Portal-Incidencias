@@ -7,7 +7,7 @@
  */
 import { CORPORATE_CSS } from "./corporate-css";
 import { blocksToHtml, type PropuestaBlock } from "./html";
-import { parseProposalFromBlocks, splitBlocksForPdfPages } from "./notion-parser";
+import { filterDynamicContentBlocks, parseProposalFromBlocks } from "./notion-parser";
 import type { CorporateCover } from "./corporate-types";
 import type { AssetName } from "./assets";
 
@@ -29,6 +29,79 @@ function objetivosHtml(objetivos: string[]): string {
 function docFooter(pageNum: number): string {
   return `<footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>${pageNum}</span></footer>`;
 }
+
+/** Contenido variable: un solo flujo continuo (Chromium pagina en A4 sin cajas fijas por sección). */
+const PROPOSAL_FLOW_CSS = `
+.proposal-flow {
+  width: 794px;
+  position: relative;
+  background: var(--page-bg);
+  box-sizing: border-box;
+  padding: 54px 80px 64px 60px;
+  break-before: page;
+  page-break-before: always;
+}
+.proposal-flow .section-title,
+.proposal-flow .subsection-title {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.proposal-flow .section-title + *,
+.proposal-flow .subsection-title + * {
+  break-before: avoid;
+  page-break-before: avoid;
+}
+.proposal-flow p,
+.proposal-flow li {
+  orphans: 3;
+  widows: 3;
+}
+.proposal-flow ul,
+.proposal-flow ol {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+.proposal-flow .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 18px;
+  break-inside: auto;
+  page-break-inside: auto;
+}
+.proposal-flow .data-table tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.proposal-flow .data-table thead {
+  display: table-header-group;
+}
+.proposal-flow .data-table th,
+.proposal-flow .data-table td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  vertical-align: top;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.proposal-flow .data-table th {
+  background: var(--teal);
+  color: #ffffff;
+  font-weight: 700;
+}
+@media print {
+  .flow-print-footer {
+    position: fixed;
+    bottom: 18px;
+    left: 60px;
+    right: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    z-index: 9999;
+  }
+}
+`;
 
 function buildFixedPages(
   c: CorporateCover,
@@ -147,15 +220,15 @@ ${objetivosHtml(objetivos)}
         </table>
         <p class="note-small">** Cada uno de los responsables de los distintos &ldquo;Módulos&rdquo; del sistema se irán delimitando mediante se avanza con las reuniones de requerimientos.</p>
         <h3 class="subsection-title subsection-spacing">Responsabilidad del Proveedor</h3>
+        <p>La responsabilidad del Product Owner es asegurarse de que están entregando el mayor valor.</p>
+        <p>La responsabilidad del Scrum Master es unir todo y garantizar que el proceso de SCRUM se haga bien. En términos prácticos, eso significa que ayudan al product owner a definir el valor, al equipo de desarrollo a entregar el valor y al equipo de scrum a mejorar.</p>
+        <p>La responsabilidad del equipo de desarrollo es llevar a cabo el desarrollo, implementación y despliegue del aplicativo, así cómo la solución de cualquier tipo de errores que se tenga.</p>
       </div>
       ${docFooter(5)}
     </section>
 
     <section class="page page-standard page-compact">
       <div class="page-inner page-inner-standard">
-        <p>La responsabilidad del Product Owner es asegurarse de que están entregando el mayor valor.</p>
-        <p>La responsabilidad del Scrum Master es unir todo y garantizar que el proceso de SCRUM se haga bien. En términos prácticos, eso significa que ayudan al product owner a definir el valor, al equipo de desarrollo a entregar el valor y al equipo de scrum a mejorar.</p>
-        <p>La responsabilidad del equipo de desarrollo es llevar a cabo el desarrollo, implementación y despliegue del aplicativo, así cómo la solución de cualquier tipo de errores que se tenga.</p>
         <h3 class="subsection-title">Responsabilidad del Cliente</h3>
         <p>Los responsables de cada uno de los módulos tienen la responsabilidad de aprobar y revisar los requerimientos del sistema. En el caso de modificaciones se evaluará si se necesita una redefinición del alcance del sistema. Es importante que se intenten definir bien los requerimientos y sacar todos los flujos al principio del desarrollo ya que el costo del cambio se va incrementando mientras va avanzando el proyecto.</p>
         <p>El siguiente gráfico demuestra que mientras se descubren cambios en las primeras etapas del desarrollo del sistema serán mucho menos costosos de implementar. Dentro del proyecto se tendrá cómo referencia los requerimientos levantados durante las primeras sesiones de trabajo para la elaboración del contrato. En el caso de haber requerimientos aprobados y estén en etapas de desarrollo, pruebas o despliegue se evaluará si estos cambios pueden ser implementados sin costos adicionales o con costos adicionales, la responsabilidad será de cada uno de los responsables del módulo.</p>
@@ -168,34 +241,17 @@ ${objetivosHtml(objetivos)}
     </section>`;
 }
 
-function buildDynamicPages(blocks: PropuestaBlock[], startPage: number): string {
-  const groups = splitBlocksForPdfPages(blocks);
-  let pageNum = startPage;
-  const pages: string[] = [];
+function buildDynamicFlow(blocks: PropuestaBlock[]): string {
+  const inner = blocksToHtml(filterDynamicContentBlocks(blocks), false);
+  if (!inner.trim()) return "";
 
-  for (const group of groups) {
-    const inner = blocksToHtml(group, false);
-    if (!inner.trim()) continue;
-
-    const isFinal =
-      group.some((b) => {
-        if (b.type !== "heading_1" && b.type !== "heading_2") return false;
-        const data = b[b.type] as { rich_text?: { plain_text?: string }[] } | undefined;
-        const text = (data?.rich_text ?? []).map((rt) => rt.plain_text ?? "").join("");
-        return /conclusion/i.test(text.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
-      }) ?? false;
-
-    pages.push(`
-    <section class="page page-standard page-dynamic${isFinal ? " page-final" : ""}">
-      <div class="page-inner page-inner-standard${isFinal ? " page-last" : ""}">
+  return `
+    <div class="proposal-flow page-standard">
 ${inner}
-      </div>
-      ${docFooter(pageNum)}
-    </section>`);
-    pageNum++;
-  }
-
-  return pages.join("\n");
+    </div>
+    <div class="flow-print-footer" aria-hidden="true">
+      <a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a>
+    </div>`;
 }
 
 export function buildLiteralCorporateHtml(
@@ -211,7 +267,7 @@ export function buildLiteralCorporateHtml(
     parsed.scrumMaster,
     parsed.qaResponsable,
   );
-  const dynamicPages = buildDynamicPages(blocks, 7);
+  const dynamicFlow = buildDynamicFlow(blocks);
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -221,11 +277,12 @@ export function buildLiteralCorporateHtml(
   <title>Manticore Labs - Propuesta ${esc(cover.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>${CORPORATE_CSS}</style>
+  <style>${PROPOSAL_FLOW_CSS}</style>
 </head>
 <body>
   <main class="document">
 ${fixedPages}
-${dynamicPages}
+${dynamicFlow}
   </main>
 </body>
 </html>`;
