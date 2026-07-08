@@ -140,16 +140,69 @@ export function mergeProposalContent(
     objetivos: primary.objetivos.length ? primary.objetivos : secondary.objetivos,
     modulos: primary.modulos.length ? primary.modulos : secondary.modulos,
     personal: primary.personal.length ? primary.personal : secondary.personal,
-    actividades: primary.actividades.some((a) => a.semanas > 0)
+    actividades: primary.actividades.some((a) => a.semanas > 0 || (a.horas ?? 0) > 0)
       ? primary.actividades
       : secondary.actividades,
     requerimientos: primary.requerimientos.length ? primary.requerimientos : secondary.requerimientos,
+    financialsFromNotion: primary.financialsFromNotion ?? secondary.financialsFromNotion,
+    pagosFromNotion: primary.pagosFromNotion?.length ? primary.pagosFromNotion : secondary.pagosFromNotion,
+    entregablesHtml: primary.entregablesHtml || secondary.entregablesHtml,
+    actividadesHtml: primary.actividadesHtml || secondary.actividadesHtml,
+    formaPagoHtml: primary.formaPagoHtml || secondary.formaPagoHtml,
+    seccionesExtrasHtml: primary.seccionesExtrasHtml?.length
+      ? primary.seccionesExtrasHtml
+      : secondary.seccionesExtrasHtml,
   };
 }
 
 export function isSparseContent(content: CorporateProposalContent): boolean {
+  const hasFinancials =
+    (content.financialsFromNotion?.subtotal ?? 0) > 0 ||
+    (content.financialsFromNotion?.total ?? 0) > 0;
+  const hasActivityData = content.actividades.some(
+    (a) => a.semanas > 0 || (a.horas ?? 0) > 0 || a.descripcion.trim().length > 0
+  );
+  if (content.modulos.length > 0 && (hasFinancials || hasActivityData)) return false;
   const totalWeeks = content.actividades.reduce((s, a) => s + (a.semanas || 0), 0);
   return content.modulos.length === 0 || totalWeeks < 1;
+}
+
+/** Normaliza sin inventar valores: solo limpia texto y mantiene lo que viene de Notion. */
+export function standardizeProposalContentFaithful(
+  content: CorporateProposalContent
+): CorporateProposalContent {
+  const objetivos = content.objetivos.map(stripHuIds).filter(Boolean);
+
+  return {
+    cover: content.cover,
+    scrumMaster: content.scrumMaster?.trim() || "Manticore Labs",
+    qaResponsable: content.qaResponsable?.trim() || "Manticore Labs",
+    objetivos:
+      objetivos.length > 0 ? objetivos : ["Cubrir los requerimientos funcionales solicitados por el cliente."],
+    modulos: content.modulos.map(normModule),
+    personal: content.personal
+      .filter((p) => p.rol.trim())
+      .map((p) => ({
+        rol: stripHuIds(p.rol),
+        cantidad: Math.max(1, p.cantidad || 1),
+        descripcion: stripHuIds(p.descripcion),
+      })),
+    actividades: ACTIVITY_ORDER.map((_, i) => {
+      const src = content.actividades[i];
+      return {
+        descripcion: stripHuIds(src?.descripcion ?? ""),
+        semanas: typeof src?.semanas === "number" ? src.semanas : 0,
+        horas: typeof src?.horas === "number" ? src.horas : undefined,
+      };
+    }),
+    requerimientos: content.requerimientos.map(normRequirement),
+    financialsFromNotion: content.financialsFromNotion,
+    pagosFromNotion: content.pagosFromNotion,
+    entregablesHtml: content.entregablesHtml,
+    actividadesHtml: content.actividadesHtml,
+    formaPagoHtml: content.formaPagoHtml,
+    seccionesExtrasHtml: content.seccionesExtrasHtml,
+  };
 }
 
 /** Adapta cualquier propuesta de Notion al formato fijo de la plantilla corporativa. */
@@ -194,7 +247,7 @@ export function standardizeProposalContent(
 export const PROPUESTA_STANDARD_GUIDE = {
   title: "Plantilla corporativa automática",
   intro:
-    "Al generar el PDF, el portal adapta el contenido de Notion a la plantilla fija Manticore: mismas secciones, mismas tablas (columnas y filas estándar), mismos tamaños de página y cálculos de precios deterministas. No hace falta validar manualmente antes de descargar.",
+    "Al generar el PDF, el portal toma el contenido aprobado en Notion (tablas, horas, precios y forma de pago) y lo maqueta con la plantilla corporativa Manticore. No recalcula montos ni inventa filas cuando la propuesta ya trae esos datos.",
   sections: [
     "Portada, índice y metodología SCRUM (bloques fijos)",
     "Tabla Soluciones: Módulo · Complejidad · Descripción · Funcionalidades",

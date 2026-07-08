@@ -188,16 +188,55 @@ a { color: #2f67c7; text-decoration: underline; }
   break-inside: avoid;
 }
 
-p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoid; break-inside: avoid; }
+p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: justify;
+  text-justify: inter-word;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
 
-.clause-block { page-break-inside: avoid; break-inside: avoid; }
+.clause-block {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.field-block,
+.field-label {
+  text-align: justify;
+  text-justify: inter-word;
+}
 
 .content-list, .phase-list, .solution-list, .payment-list { margin: 0 0 8px 18px; padding-left: 16px; page-break-inside: avoid; break-inside: avoid; }
-.content-list li, .phase-list li, .solution-list li, .payment-list li { margin-bottom: 4px; font-size: 13px; line-height: 1.45; page-break-inside: avoid; break-inside: avoid; }
+.content-list li, .phase-list li, .solution-list li, .payment-list li {
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: justify;
+  text-justify: inter-word;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
 .phase-list>li { margin-bottom: 4px; }
 .phase-list ul li { font-size: 12px; line-height: 1.5; margin-bottom: 1px; }
 .phase-list ul, .solution-sublist, .payment-list ul { margin: 2px 0 0 0; padding-left: 30px; }
-.phase-list ul li, .solution-sublist li, .payment-list ul li { margin-bottom: 2px; }
+.phase-list ul li, .solution-sublist li, .payment-list ul li {
+  margin-bottom: 2px;
+  text-align: justify;
+  text-justify: inter-word;
+}
+.table-bullets li {
+  margin-bottom: 2px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
 .solution-list { padding-left: 14px; }
 .solution-list>li { margin-bottom: 4px; }
 .solution-sublist { list-style: lower-alpha; }
@@ -217,6 +256,7 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 .data-table thead { display: table-header-group; }
 .data-table tr { page-break-inside: avoid; break-inside: avoid; }
 .data-table th, .data-table td { border: 1px solid var(--line); padding: 5px 7px; vertical-align: top; font-size: 12px; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; hyphens: auto; }
+.data-table td { text-align: justify; text-justify: inter-word; }
 .data-table th { background: var(--teal); color: #ffffff; font-weight: 700; text-align: left; }
 .data-table-solutions th:nth-child(2) { white-space: nowrap; hyphens: none; overflow-wrap: normal; word-break: normal; }
 .data-table-roles { width: 100%; }
@@ -229,8 +269,8 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 
 .center-cell { text-align: center; }
 
-.note-small { margin-top: 12px; font-size: 12px; font-weight: 700; line-height: 1.5; }
-.note-inline { margin: 8px 0 10px; font-size: 11px; line-height: 1.45; }
+.note-small { margin-top: 12px; font-size: 12px; font-weight: 700; line-height: 1.5; text-align: justify; text-justify: inter-word; }
+.note-inline { margin: 8px 0 10px; font-size: 11px; line-height: 1.45; text-align: justify; text-justify: inter-word; }
 
 .data-table-activities th:nth-child(1), .data-table-activities td:nth-child(1) { width: 28%; text-align: center; }
 .data-table-activities th:nth-child(2), .data-table-activities td:nth-child(2) { width: 42%; }
@@ -248,26 +288,36 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
 .data-table-requirements th:nth-child(4), .data-table-requirements td:nth-child(4) { width: 18%; text-align: center; }
 
 .table-bullets { margin: 0; padding-left: 16px; word-break: break-word; overflow-wrap: anywhere; }
-.table-bullets li { margin-bottom: 2px; word-break: break-word; overflow-wrap: anywhere; }
 
 .data-table-stages th:nth-child(1), .data-table-stages td:nth-child(1) { width: 34%; text-align: center; }
 .data-table-stages th:nth-child(2), .data-table-stages td:nth-child(2) { width: 18%; text-align: center; }
 .data-table-stages th:nth-child(3), .data-table-stages td:nth-child(3) { width: 48%; }
 
 .price-table { width: 100%; border-collapse: collapse; margin: 24px 0 10px; table-layout: fixed; }
+.price-table-wrap .price-note + .price-table,
+.price-table-wrap .costs-disclaimer + .price-table { margin-top: 0; }
 .price-table th, .price-table td { padding: 8px 12px; font-size: 12px; vertical-align: top; }
+.price-table tbody td { text-align: justify; text-justify: inter-word; }
 .price-table thead th { background: var(--teal); color: #ffffff; font-weight: 700; text-align: left; }
 .price-table thead th:last-child { text-align: right; }
 .price-table tbody td { border-left: 1px solid #dadada; border-right: 1px solid #dadada; }
 .price-main td { border-bottom: 1px dashed #d6d6d6; padding-top: 14px; padding-bottom: 16px; }
 .price-items { margin: 0; padding-left: 20px; }
-.price-items li { margin-bottom: 14px; font-size: 12px; }
+.price-items li { margin-bottom: 14px; font-size: 12px; text-align: justify; text-justify: inter-word; }
 .price-values { text-align: right; font-weight: 700; }
 .price-values div { margin-bottom: 14px; }
 .price-summary td { border-top: 1px solid #d6d6d6; padding-top: 7px; padding-bottom: 7px; }
 .price-summary td:last-child, .price-total td:last-child { text-align: right; }
 .price-total td { border-top: 1px solid #d6d6d6; border-bottom: 1px solid #d6d6d6; color: #0d5b7d; padding-top: 8px; padding-bottom: 8px; }
-.price-note { margin-top: 8px; font-size: 12px; font-weight: 700; }
+.price-note { margin: 0 0 8px; font-size: 12px; font-weight: 700; text-align: justify; text-justify: inter-word; }
+
+.costs-disclaimer {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: justify;
+  text-justify: inter-word;
+}
 
 .page-last { padding-top: 24px; }
 

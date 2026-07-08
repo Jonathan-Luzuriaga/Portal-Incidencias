@@ -6,7 +6,7 @@
  * Páginas 7+: secciones de Notion transcritas con blocksToHtml().
  */
 import { CORPORATE_CSS } from "./corporate-css";
-import { PROPOSAL_FLOW_PRINT_CSS } from "./flow-print-css";
+import { PROPOSAL_FLOW_LAYOUT_CSS, PROPOSAL_FLOW_PRINT_CSS } from "./flow-print-css";
 import { blocksToHtml, type PropuestaBlock } from "./html";
 import { filterDynamicContentBlocks, parseProposalFromBlocks } from "./notion-parser";
 import type { CorporateCover } from "./corporate-types";
@@ -30,39 +30,6 @@ function objetivosHtml(objetivos: string[]): string {
 function docFooter(pageNum: number): string {
   return `<footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>${pageNum}</span></footer>`;
 }
-
-/** Fuente sin paginar; paginateProposalFlow() la convierte en páginas A4 en render.ts */
-const PROPOSAL_FLOW_CSS = `
-.proposal-flow {
-  width: 794px;
-  box-sizing: border-box;
-  padding: 54px 80px 0 60px;
-}
-.proposal-flow .section-title,
-.proposal-flow .subsection-title {
-  break-after: avoid;
-  page-break-after: avoid;
-}
-.proposal-flow p,
-.proposal-flow li {
-  orphans: 3;
-  widows: 3;
-}
-.page-flow-tall {
-  height: auto !important;
-  min-height: 1122px !important;
-  overflow: visible;
-  page-break-inside: auto;
-  break-inside: auto;
-}
-.page-flow-tall .page-inner-standard {
-  height: auto !important;
-  overflow: visible;
-}
-.page-flow-tall .data-table {
-  page-break-inside: auto;
-}
-`;
 
 function buildFixedPages(
   c: CorporateCover,
@@ -235,7 +202,7 @@ export function buildLiteralCorporateHtml(
   <title>Manticore Labs - Propuesta ${esc(cover.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>${CORPORATE_CSS}</style>
-  <style>${PROPOSAL_FLOW_CSS}</style>
+  <style>${PROPOSAL_FLOW_LAYOUT_CSS}</style>
   <style>${PROPOSAL_FLOW_PRINT_CSS}</style>
 </head>
 <body>

@@ -82,6 +82,62 @@ export function computeFinancials(actividades: CorporateActivity[]): CorporateFi
   };
 }
 
+/**
+ * Usa los valores de Notion cuando existen; solo calcula lo que falte en la propuesta.
+ */
+export function resolveFinancials(
+  actividades: CorporateActivity[],
+  fromNotion?: Partial<CorporateFinancials> | null,
+  pagosFromNotion?: CorporatePago[] | null
+): CorporateFinancials {
+  const computed = computeFinancials(actividades);
+
+  const actividadesHoras = actividades.map((a, i) => {
+    if (typeof a.horas === "number" && a.horas > 0) return a.horas;
+    return computed.actividadesHoras[i];
+  });
+
+  const hasNotionPrices =
+    (fromNotion?.subtotal ?? 0) > 0 ||
+    (fromNotion?.total ?? 0) > 0 ||
+    (fromNotion?.precioDesarrollo ?? 0) > 0;
+
+  if (!hasNotionPrices && !fromNotion?.totalHoras && !fromNotion?.horasDesarrollo) {
+    return { ...computed, actividadesHoras };
+  }
+
+  const horasUat = fromNotion?.horasUat ?? computed.horasUat;
+  const horasDesarrollo = fromNotion?.horasDesarrollo ?? computed.horasDesarrollo;
+  const totalHoras =
+    fromNotion?.totalHoras ??
+    (horasDesarrollo + horasUat > 0 ? horasDesarrollo + horasUat : computed.totalHoras);
+
+  const subtotal = fromNotion?.subtotal ?? computed.subtotal;
+  const iva = fromNotion?.iva ?? (fromNotion?.subtotal ? round2(fromNotion.subtotal * 0.15) : computed.iva);
+  const total = fromNotion?.total ?? (fromNotion?.subtotal ? round2(subtotal + iva) : computed.total);
+  const precioPruebas = fromNotion?.precioPruebas ?? computed.precioPruebas;
+  const precioDesarrollo =
+    fromNotion?.precioDesarrollo ?? (fromNotion?.subtotal ? round2(subtotal - precioPruebas) : computed.precioDesarrollo);
+
+  const pagos =
+    pagosFromNotion && pagosFromNotion.length > 0
+      ? pagosFromNotion
+      : computePayments(fromNotion?.subtotal ?? subtotal);
+
+  return {
+    actividadesHoras,
+    totalHoras,
+    horasDesarrollo,
+    horasUat,
+    subtotal,
+    iva,
+    total,
+    precioDesarrollo,
+    precioPruebas,
+    pagos,
+  };
+}
+
 /** Determina el esquema de pagos sobre el subtotal SIN IVA. */
 export function computePayments(subtotal: number): CorporatePago[] {
   if (subtotal < 5000) {

@@ -49,6 +49,7 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
         return (
           el.classList.contains("price-table-wrap") ||
           el.classList.contains("table-wrap-keep") ||
+          el.classList.contains("costs-block") ||
           (el.classList.contains("field-block") && !el.classList.contains("field-block-loose"))
         );
       }
@@ -86,6 +87,7 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
       }
       if (current.length > 0) chunks.push(current);
 
+      // Empaquetar agresivamente: fusionar chunks adyacentes mientras quepan.
       let merged = true;
       while (merged) {
         merged = false;
@@ -99,13 +101,34 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
         }
       }
 
+      // Evitar títulos huérfanos al final de una página.
       for (let i = 0; i < chunks.length - 1; i++) {
         const chunk = chunks[i];
+        if (chunk.length === 0) continue;
         const last = chunk[chunk.length - 1];
         if (last && (isHeading(last) || last.classList.contains("field-label"))) {
-          chunks[i + 1] = [last, ...chunks[i + 1]];
-          chunk.pop();
-          if (chunk.length === 0) chunks.splice(i, 1);
+          const orphan = chunk.pop();
+          if (orphan) {
+            chunks[i + 1] = [orphan, ...chunks[i + 1]];
+          }
+          if (chunk.length === 0) {
+            chunks.splice(i, 1);
+            i--;
+          }
+        }
+      }
+
+      // Segunda pasada de fusión tras mover títulos.
+      merged = true;
+      while (merged) {
+        merged = false;
+        for (let i = 0; i < chunks.length - 1; i++) {
+          const combined = [...chunks[i], ...chunks[i + 1]];
+          if (measureNodes(combined) <= maxInner) {
+            chunks.splice(i, 2, combined);
+            merged = true;
+            break;
+          }
         }
       }
 
@@ -124,6 +147,7 @@ export async function paginateProposalFlow(page: Page): Promise<void> {
           (solo.tagName.toLowerCase() === "table" ||
             solo.classList.contains("price-table-wrap") ||
             solo.classList.contains("table-wrap-keep") ||
+            solo.classList.contains("costs-block") ||
             measureNodes(chunk) > maxInner);
 
         const section = document.createElement("section");

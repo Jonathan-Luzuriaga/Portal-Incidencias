@@ -3,13 +3,13 @@
  */
 import { blocksToText } from "@/lib/notion-propuesta-list";
 import { buildCorporateContent } from "@/lib/deepseek-propuesta-pdf";
-import { computeFinancials } from "./calc";
+import { resolveFinancials } from "./calc";
 import { buildCorporateHtml } from "./corporate-template";
 import { parseProposalFromBlocks } from "./notion-parser";
 import {
   isSparseContent,
   mergeProposalContent,
-  standardizeProposalContent,
+  standardizeProposalContentFaithful,
 } from "./propuesta-standardize";
 import type { AssetName } from "./assets";
 import type { CorporateCover } from "./corporate-types";
@@ -26,16 +26,20 @@ export async function buildStandardCorporatePdfHtml(
   assets: Record<AssetName, string>
 ): Promise<string> {
   const parsed = parseProposalFromBlocks(blocks, cover);
-  let content = standardizeProposalContent(parsed);
+  let content = standardizeProposalContentFaithful(parsed);
 
   if (isSparseContent(content)) {
     const rawText = blocksToText(blocks);
     if (rawText.trim()) {
       const extracted = await buildCorporateContent(rawText, cover);
-      content = standardizeProposalContent(mergeProposalContent(parsed, extracted));
+      content = standardizeProposalContentFaithful(mergeProposalContent(parsed, extracted));
     }
   }
 
-  const financials = computeFinancials(content.actividades);
+  const financials = resolveFinancials(
+    content.actividades,
+    content.financialsFromNotion,
+    content.pagosFromNotion
+  );
   return buildCorporateHtml(content, financials, assets);
 }

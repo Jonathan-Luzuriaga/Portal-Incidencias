@@ -30,11 +30,13 @@ export interface CorporatePersonal {
 
 /**
  * Actividad del ciclo de vida. Las 9 actividades son fijas y en orden fijo.
- * Las horas se derivan como semanas × 40 (no las provee la IA).
+ * Las horas se toman de Notion cuando existen; si no, se derivan como semanas × 40.
  */
 export interface CorporateActivity {
   descripcion: string;
   semanas: number;
+  /** Horas leídas directamente de la propuesta en Notion. */
+  horas?: number;
 }
 
 export interface CorporateRequirement {
@@ -55,6 +57,15 @@ export interface CorporateProposalContent {
   /** Exactamente 9 actividades en el orden estándar del ciclo de vida. */
   actividades: CorporateActivity[];
   requerimientos: CorporateRequirement[];
+  /** Valores financieros extraídos de Notion (tablas de costos / etapas). */
+  financialsFromNotion?: Partial<CorporateFinancials>;
+  /** Forma de pago leída de Notion. */
+  pagosFromNotion?: CorporatePago[];
+  /** HTML fiel de secciones opcionales transcritas desde Notion. */
+  entregablesHtml?: string;
+  actividadesHtml?: string;
+  formaPagoHtml?: string;
+  seccionesExtrasHtml?: Array<{ heading: string; html: string }>;
 }
 
 export interface CorporatePago {
@@ -63,6 +74,8 @@ export interface CorporatePago {
   porcentaje: number;
   /** Monto sobre el subtotal SIN IVA, formateado (ej. "1,392.00"). */
   monto: string;
+  entregables?: string[];
+  condicionPago?: string;
 }
 
 /** Resultado de los cálculos financieros (deterministas, calculados en código). */

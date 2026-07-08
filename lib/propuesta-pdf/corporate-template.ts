@@ -5,6 +5,7 @@
  * y los bloques fijos NO cambian; solo se rellenan filas y marcadores.
  */
 import { CORPORATE_CSS } from "./corporate-css";
+import { PROPOSAL_FLOW_LAYOUT_CSS, PROPOSAL_FLOW_PRINT_CSS } from "./flow-print-css";
 import { formatMoney } from "./calc";
 import type { AssetName } from "./assets";
 import type {
@@ -72,7 +73,7 @@ function activitiesRows(content: CorporateProposalContent, fin: CorporateFinanci
   return ACTIVITY_ORDER.map((nombre, i) => {
     const act = content.actividades[i];
     const semanas = act?.semanas ?? 0;
-    const horas = fin.actividadesHoras[i];
+    const horas = act?.horas ?? fin.actividadesHoras[i];
     const desc = act?.descripcion ?? "";
     return `<tr>
   <td><strong>${esc(nombre)}</strong></td>
@@ -102,15 +103,158 @@ function requirementsRows(content: CorporateProposalContent): string {
 
 function paymentsHtml(fin: CorporateFinancials): string {
   return fin.pagos
-    .map(
-      (p) => `<li>
+    .map((p) => {
+      const entregablesBlock =
+        p.entregables && p.entregables.length > 0
+          ? `<p><strong>Entregables asociados:</strong></p>
+<ul>${p.entregables.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>`
+          : "";
+      const pagoBlock = p.condicionPago
+        ? `<p><strong>Condición de pago:</strong></p><p>${esc(p.condicionPago)}</p>`
+        : `<ul><li>Se debe pagar el ${p.porcentaje}% con un monto total de $${esc(p.monto)} sin IVA.</li></ul>`;
+      return `<li>
   <span>Fase ${p.fase} - ${esc(p.hito)}</span>
-  <ul>
-    <li>Se debe pagar el ${p.porcentaje}% con un monto total de $${esc(p.monto)} sin IVA.</li>
-  </ul>
-</li>`
-    )
+  ${entregablesBlock}
+  ${pagoBlock}
+</li>`;
+    })
     .join("\n");
+}
+
+function extraSectionsBlock(content: CorporateProposalContent): string {
+  const parts: string[] = [];
+  if (content.entregablesHtml) parts.push(content.entregablesHtml);
+  if (content.seccionesExtrasHtml) {
+    for (const section of content.seccionesExtrasHtml) {
+      parts.push(section.html);
+    }
+  }
+  return parts.join("\n");
+}
+
+function activitiesBlock(content: CorporateProposalContent, fin: CorporateFinancials): string {
+  if (content.actividadesHtml) return content.actividadesHtml;
+  return `<h2 class="section-title section-gap-medium">Actividades</h2>
+      <table class="data-table data-table-activities">
+        <thead><tr><th>Actividad</th><th>Descripción</th><th>Tiempo estimado</th><th>Tiempo estimado (horas)</th></tr></thead>
+        <tbody>
+${activitiesRows(content, fin)}
+        </tbody>
+      </table>`;
+}
+
+function paymentBlock(content: CorporateProposalContent, fin: CorporateFinancials): string {
+  if (content.formaPagoHtml) return content.formaPagoHtml;
+  return `<h2 class="section-title section-gap-medium">Forma de pago</h2>
+      <ul class="payment-list">
+${paymentsHtml(fin)}
+      </ul>`;
+}
+
+/** Contenido variable (páginas 7+) empaquetado por paginateProposalFlow en render.ts */
+function buildProposalFlow(
+  content: CorporateProposalContent,
+  fin: CorporateFinancials
+): string {
+  return `
+    <div class="proposal-flow">
+      <h2 class="section-title">Descripción de la solución</h2>
+      <table class="data-table data-table-solutions">
+        <thead><tr><th>Módulo</th><th>Complejidad</th><th>Descripción</th><th>Funcionalidades principales</th></tr></thead>
+        <tbody>
+${solutionsRows(content)}
+        </tbody>
+      </table>
+
+${extraSectionsBlock(content)}
+
+      <h2 class="section-title section-gap-large">Personal</h2>
+      <p>El personal requerido para las diferentes fases del proyecto, son necesarios ya que se maneja entregas parciales del proyecto, estas entregas son ITERATIVAS incrementales, por lo cual en cada fase cada miembro del equipo realiza partes fundamentales para realizar las entregas a tiempo, con la calidad necesaria.</p>
+      <table class="data-table data-table-personal">
+        <thead><tr><th>Rol</th><th>Cantidad</th><th>Descripción del Rol</th></tr></thead>
+        <tbody>
+${personalRows(content)}
+        </tbody>
+      </table>
+
+      <p class="note-inline"><strong>NOTA:</strong> Manticore Labs no se responsabiliza por despliegues ni problemas presentados en ambientes del cliente. En caso de tener un flujo DevOps Manticore Labs brindará los comandos para levantar el aplicativo pero no será responsable de implementar nuevos flujos ni tampoco de problemas de ambiente que se tengan durante el despliegue. Manticore Labs es responsable del código y lógica de negocio escrita en el mismo.</p>
+
+${activitiesBlock(content, fin)}
+
+      <h2 class="section-title section-gap-medium">Requerimientos y tiempos</h2>
+      <table class="data-table data-table-requirements">
+        <thead><tr><th>#</th><th>Requerimiento</th><th>Descripción</th><th>Tiempo</th></tr></thead>
+        <tbody>
+${requirementsRows(content)}
+        </tbody>
+      </table>
+
+      <div class="costs-block table-wrap-keep">
+        <h2 class="section-title section-gap-medium">Tiempos y costos de la solución</h2>
+        <p>Las etapas de la solución son:</p>
+        <table class="data-table data-table-stages">
+          <thead><tr><th>Etapas</th><th>Tiempo estimado</th><th>Detalle</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Desarrollo, entrega y pruebas continuas</strong></td>
+              <td><strong>${fin.horasDesarrollo} horas</strong></td>
+              <td>Desarrollo de funciones previamente aprobadas en actas e historias de usuario.</td>
+            </tr>
+            <tr>
+              <td><strong>Revisión</strong></td>
+              <td><strong>${fin.horasUat} horas</strong></td>
+              <td>Revisión en ambiente de pre-producción.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Se estima que la fecha de entrega será de ${fin.totalHoras} horas a partir de la aprobación por parte del cliente.</p>
+        <div class="price-table-wrap">
+          <p class="price-note">** NO INCLUYE MODIFICACIONES DE REQUERIMIENTOS</p>
+          <p class="costs-disclaimer">En caso de que los requerimientos no se hayan finalizado, el proyecto deberá de tener una nueva fecha de inicio de desarrollo, entrega y pruebas continuas cuando finalmente se termine de definir la etapa de requerimientos. En caso de ser necesario se puede aplazar el tiempo estimado para la revisión del sistema por motivos técnicos o por parte del cliente. La prueba del aplicativo se realizará en ambiente de pre producción. No somos responsables de errores, latencia, ni otros parecidos en ambientes de prueba o productivos. Estos tiempos son estimados, son referenciales y están sujetos a cambios</p>
+          <table class="price-table">
+            <thead><tr><th>Descripción</th><th>Precio</th></tr></thead>
+            <tbody>
+              <tr class="price-main">
+                <td>
+                  <ul class="price-items">
+                    <li><strong>Desarrollo de la solución</strong></li>
+                    <li><strong>Pruebas</strong></li>
+                  </ul>
+                </td>
+                <td class="price-values">
+                  <div>$${formatMoney(fin.precioDesarrollo)}</div>
+                  <div>$${formatMoney(fin.precioPruebas)}</div>
+                </td>
+              </tr>
+              <tr class="price-summary"><td><strong>Subtotal</strong></td><td><strong>$${formatMoney(fin.subtotal)}</strong></td></tr>
+              <tr class="price-summary"><td><strong>I.V.A.</strong></td><td><strong>$${formatMoney(fin.iva)}</strong></td></tr>
+              <tr class="price-total"><td><strong>Total</strong></td><td><strong>$${formatMoney(fin.total)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h2 class="section-title section-gap-medium">Nota</h2>
+      <p>Se establecerá un límite de tiempo posterior a la entrega y notificación de finalización para que el cliente realice la validación y/o despliegue correspondiente.</p>
+      <ul class="content-list">
+        <li>Una vez transcurrido este tiempo, se considerará el trabajo como finalizado.</li>
+        <li>En caso de que el cliente no realice pruebas o despliegues dentro del plazo definido, las horas adicionales de soporte, revisión o validación serán facturadas como servicio adicional.</li>
+        <li>Se aclara que cualquier mal uso del sistema o configuraciones incorrectas realizadas por el cliente, que requieran soporte adicional, serán también facturadas.</li>
+        <li>Todo tiempo invertido en revisiones o atención de incidencias fuera del alcance de la entrega será contabilizado y cobrado.</li>
+      </ul>
+      <p class="clause-block">Todo cambio estructural o de datos en la base de datos deberá implementarse a través de migraciones versionadas entregadas por Manticore Labs. El cliente es responsable de ejecutar dichas migraciones en sus ambientes (QA y Producción) siguiendo los comandos y el orden provistos por Manticore. Queda estrictamente prohibido el uso de scripts manuales de base de datos fuera de este flujo. Cualquier modificación directa a la base de datos realizada sin este proceso, ya sea por el cliente o por terceros, libera a Manticore Labs de responsabilidad sobre los errores derivados y será atendida bajo soporte facturable.</p>
+      <p class="clause-block">El alcance de la garantía de Manticore Labs cubre únicamente los defectos reproducibles en el ambiente de QA del cliente, donde Manticore Labs realiza sus pruebas de entrega antes de cada despliegue. Si una funcionalidad opera correctamente en dicho ambiente y presenta fallas en el ambiente de producción del cliente, Manticore Labs realizará una revisión inicial para determinar el origen del problema. Si se determina que la causa es el ambiente, los datos, la configuración o la operación realizada en producción por el cliente, la atención continua tendrá costo según el tarifario vigente.</p>
+      <p>Esta cláusula busca evitar reprocesos innecesarios, optimizar el uso del tiempo del equipo y garantizar la correcta gestión del sistema por parte del cliente.</p>
+
+${paymentBlock(content, fin)}
+
+      <h2 class="section-title section-gap-medium">Conclusiones</h2>
+      <ul class="content-list">
+        <li>Se ha definido la descripción de la solución y la propuesta para llevar a cabo los requerimientos solicitados.</li>
+        <li>La propuesta está alineada a los requerimientos levantados y a las lecciones aprendidas de proyectos similares.</li>
+        <li>El costo puede variar si cambia el alcance (Change Request) o si cambian los contratos de API o dependencias externas.</li>
+      </ul>
+    </div>`;
 }
 
 export function buildCorporateHtml(
@@ -128,6 +272,8 @@ export function buildCorporateHtml(
   <title>Manticore Labs - Propuesta ${esc(c.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>${CORPORATE_CSS}</style>
+  <style>${PROPOSAL_FLOW_LAYOUT_CSS}</style>
+  <style>${PROPOSAL_FLOW_PRINT_CSS}</style>
 </head>
 <body>
   <main class="document">
@@ -261,133 +407,7 @@ ${objetivosHtml(content.objetivos)}
       <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>6</span></footer>
     </section>
 
-    <section class="page page-standard page-dynamic">
-      <div class="page-inner page-inner-standard">
-        <h2 class="section-title">Descripción de la solución</h2>
-        <table class="data-table data-table-solutions">
-          <thead><tr><th>Módulo</th><th>Complejidad</th><th>Descripción</th><th>Funcionalidades principales</th></tr></thead>
-          <tbody>
-${solutionsRows(content)}
-          </tbody>
-        </table>
-
-        <h2 class="section-title section-gap-large">Personal</h2>
-        <p>El personal requerido para las diferentes fases del proyecto, son necesarios ya que se maneja entregas parciales del proyecto, estas entregas son ITERATIVAS incrementales, por lo cual en cada fase cada miembro del equipo realiza partes fundamentales para realizar las entregas a tiempo, con la calidad necesaria.</p>
-        <table class="data-table data-table-personal">
-          <thead><tr><th>Rol</th><th>Cantidad</th><th>Descripción del Rol</th></tr></thead>
-          <tbody>
-${personalRows(content)}
-          </tbody>
-        </table>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>7</span></footer>
-    </section>
-
-    <section class="page page-standard page-compact page-dynamic">
-      <div class="page-inner page-inner-standard">
-        <p class="note-inline"><strong>NOTA:</strong> Manticore Labs no se responsabiliza por despliegues ni problemas presentados en ambientes del cliente. En caso de tener un flujo DevOps Manticore Labs brindará los comandos para levantar el aplicativo pero no será responsable de implementar nuevos flujos ni tampoco de problemas de ambiente que se tengan durante el despliegue. Manticore Labs es responsable del código y lógica de negocio escrita en el mismo.</p>
-        <h2 class="section-title section-gap-medium">Actividades</h2>
-        <table class="data-table data-table-activities">
-          <thead><tr><th>Actividad</th><th>Descripción</th><th>Tiempo estimado</th><th>Tiempo estimado (horas)</th></tr></thead>
-          <tbody>
-${activitiesRows(content, fin)}
-          </tbody>
-        </table>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>8</span></footer>
-    </section>
-
-    <section class="page page-standard page-dynamic">
-      <div class="page-inner page-inner-standard">
-        <h2 class="section-title">Requerimientos y tiempos</h2>
-        <table class="data-table data-table-requirements">
-          <thead><tr><th>#</th><th>Requerimiento</th><th>Descripción</th><th>Tiempo</th></tr></thead>
-          <tbody>
-${requirementsRows(content)}
-          </tbody>
-        </table>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>9</span></footer>
-    </section>
-
-    <section class="page page-standard">
-      <div class="page-inner page-inner-standard">
-        <h2 class="section-title">Tiempos y costos de la solución</h2>
-        <p>Las etapas de la solución son:</p>
-        <table class="data-table data-table-stages">
-          <thead><tr><th>Etapas</th><th>Tiempo estimado</th><th>Detalle</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><strong>Desarrollo, entrega y pruebas continuas</strong></td>
-              <td><strong>${fin.horasDesarrollo} horas</strong></td>
-              <td>Desarrollo de funciones previamente aprobadas en actas e historias de usuario.</td>
-            </tr>
-            <tr>
-              <td><strong>Revisión</strong></td>
-              <td><strong>${fin.horasUat} horas</strong></td>
-              <td>Revisión en ambiente de pre-producción.</td>
-            </tr>
-          </tbody>
-        </table>
-        <p>Se estima que la fecha de entrega será de ${fin.totalHoras} horas a partir de la aprobación por parte del cliente.</p>
-
-        <table class="price-table">
-          <thead><tr><th>Descripción</th><th>Precio</th></tr></thead>
-          <tbody>
-            <tr class="price-main">
-              <td>
-                <ul class="price-items">
-                  <li><strong>Desarrollo de la solución</strong></li>
-                  <li><strong>Pruebas</strong></li>
-                </ul>
-              </td>
-              <td class="price-values">
-                <div>$${formatMoney(fin.precioDesarrollo)}</div>
-                <div>$${formatMoney(fin.precioPruebas)}</div>
-              </td>
-            </tr>
-            <tr class="price-summary"><td><strong>Subtotal</strong></td><td><strong>$${formatMoney(fin.subtotal)}</strong></td></tr>
-            <tr class="price-summary"><td><strong>I.V.A.</strong></td><td><strong>$${formatMoney(fin.iva)}</strong></td></tr>
-            <tr class="price-total"><td><strong>Total</strong></td><td><strong>$${formatMoney(fin.total)}</strong></td></tr>
-          </tbody>
-        </table>
-        <p class="price-note">** NO INCLUYE MODIFICACIONES DE REQUERIMIENTOS</p>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>10</span></footer>
-    </section>
-
-    <section class="page page-standard page-compact">
-      <div class="page-inner page-inner-standard">
-        <h2 class="section-title">Nota</h2>
-        <p>Se establecerá un límite de tiempo posterior a la entrega y notificación de finalización para que el cliente realice la validación y/o despliegue correspondiente.</p>
-        <ul class="content-list">
-          <li>Una vez transcurrido este tiempo, se considerará el trabajo como finalizado.</li>
-          <li>En caso de que el cliente no realice pruebas o despliegues dentro del plazo definido, las horas adicionales de soporte, revisión o validación serán facturadas como servicio adicional.</li>
-          <li>Se aclara que cualquier mal uso del sistema o configuraciones incorrectas realizadas por el cliente, que requieran soporte adicional, serán también facturadas.</li>
-          <li>Todo tiempo invertido en revisiones o atención de incidencias fuera del alcance de la entrega será contabilizado y cobrado.</li>
-        </ul>
-        <p class="clause-block">Todo cambio estructural o de datos en la base de datos deberá implementarse a través de migraciones versionadas entregadas por Manticore Labs. El cliente es responsable de ejecutar dichas migraciones en sus ambientes (QA y Producción) siguiendo los comandos y el orden provistos por Manticore. Queda estrictamente prohibido el uso de scripts manuales de base de datos fuera de este flujo. Cualquier modificación directa a la base de datos realizada sin este proceso, ya sea por el cliente o por terceros, libera a Manticore Labs de responsabilidad sobre los errores derivados y será atendida bajo soporte facturable.</p>
-        <p class="clause-block">El alcance de la garantía de Manticore Labs cubre únicamente los defectos reproducibles en el ambiente de QA del cliente, donde Manticore Labs realiza sus pruebas de entrega antes de cada despliegue. Si una funcionalidad opera correctamente en dicho ambiente y presenta fallas en el ambiente de producción del cliente, Manticore Labs realizará una revisión inicial para determinar el origen del problema. Si se determina que la causa es el ambiente, los datos, la configuración o la operación realizada en producción por el cliente, la atención continua tendrá costo según el tarifario vigente.</p>
-        <p>Esta cláusula busca evitar reprocesos innecesarios, optimizar el uso del tiempo del equipo y garantizar la correcta gestión del sistema por parte del cliente.</p>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>11</span></footer>
-    </section>
-
-    <section class="page page-standard page-compact page-final">
-      <div class="page-inner page-inner-standard page-last">
-        <h2 class="section-title">Forma de pago</h2>
-        <ul class="payment-list">
-${paymentsHtml(fin)}
-        </ul>
-        <h2 class="section-title section-gap-medium">Conclusiones</h2>
-        <ul class="content-list">
-          <li>Se ha definido la descripción de la solución y la propuesta para llevar a cabo los requerimientos solicitados.</li>
-          <li>La propuesta está alineada a los requerimientos levantados y a las lecciones aprendidas de proyectos similares.</li>
-          <li>El costo puede variar si cambia el alcance (Change Request) o si cambian los contratos de API o dependencias externas.</li>
-        </ul>
-      </div>
-      <footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>12</span></footer>
-    </section>
+${buildProposalFlow(content, fin)}
 
   </main>
 </body>

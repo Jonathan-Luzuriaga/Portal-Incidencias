@@ -165,6 +165,54 @@ async function launchWithRetry(
   throw lastErr;
 }
 
+/** Renderiza HTML paginado (mismo DOM que usa el PDF) para la vista previa. */
+export async function renderHtmlToPreviewDocument(
+  html: string,
+  options: RenderPdfOptions = {}
+): Promise<string> {
+  return withTimeout(
+    renderHtmlToPreviewDocumentInner(html, options),
+    RENDER_TIMEOUT_MS,
+    "Tiempo agotado generando la vista previa. Intenta de nuevo."
+  );
+}
+
+async function renderHtmlToPreviewDocumentInner(
+  html: string,
+  options: RenderPdfOptions = {}
+): Promise<string> {
+  const puppeteer = (await import("puppeteer-core")).default;
+  const { executablePath, args, headless } = await resolveBrowserLaunchProfile(options);
+
+  const browser = await launchWithRetry(puppeteer, { args, executablePath, headless });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 45000 });
+    try {
+      await page.emulateMediaType("print");
+    } catch {
+      // no crítico
+    }
+    try {
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+    } catch {
+      // fuentes web no críticas
+    }
+
+    try {
+      await paginateProposalFlow(page);
+    } catch (err) {
+      console.warn("[render] No se pudo paginar proposal-flow para vista previa:", err);
+    }
+
+    return await page.content();
+  } finally {
+    await browser.close();
+  }
+}
+
 async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}): Promise<Buffer> {
   const puppeteer = (await import("puppeteer-core")).default;
   const { executablePath, args, headless } = await resolveBrowserLaunchProfile(options);

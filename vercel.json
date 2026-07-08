@@ -2,6 +2,12 @@
   "functions": {
     "app/api/propuestas/pdf/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/propuestas/pdf/preview/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/propuestas/pdf/download/route.ts": {
+      "maxDuration": 120
     }
   },
   "headers": [
