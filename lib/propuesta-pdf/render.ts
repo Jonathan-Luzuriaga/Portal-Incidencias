@@ -1,6 +1,11 @@
 import { ServiceError } from "../types";
 import { measurePages, logMeasureReport } from "./measure";
-import { paginateProposalFlow } from "./paginate-flow";
+
+const CORPORATE_PDF_FOOTER = `
+<div style="width:100%;font-size:11px;font-family:Arial,Helvetica,sans-serif;padding:0 60px 0 56px;margin:0;display:flex;justify-content:space-between;align-items:center;color:#000;">
+  <span style="color:#2f67c7;text-decoration:underline;">info@manticore-labs.com</span>
+  <span class="pageNumber"></span>
+</div>`.trim();
 
 export interface RenderPdfOptions {
   /**
@@ -187,32 +192,19 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
     }
 
     try {
-      await paginateProposalFlow(page);
+      const report = await measurePages(page);
+      logMeasureReport(report);
     } catch (err) {
-      console.warn("[render] No se pudo paginar proposal-flow:", err);
-    }
-
-    if (options.preferCSSPageSize) {
-      try {
-        const report = await measurePages(page);
-        logMeasureReport(report);
-      } catch (err) {
-        console.warn("[render] No se pudo medir paginas:", err);
-      }
-
-      const pdf = await page.pdf({
-        printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "0", right: "0", bottom: "0", left: "0" },
-        timeout: 30000,
-      });
-      return Buffer.from(pdf);
+      console.warn("[render] No se pudo medir paginas:", err);
     }
 
     const pdf = await page.pdf({
-      format: "A4",
       printBackground: true,
-      margin: { top: "16mm", right: "14mm", bottom: "14mm", left: "14mm" },
+      preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate: CORPORATE_PDF_FOOTER,
+      margin: { top: "0", right: "0", bottom: "64px", left: "0" },
       timeout: 30000,
     });
     return Buffer.from(pdf);

@@ -75,11 +75,52 @@ function blockPlainText(block: PropuestaBlock): string {
     .trim();
 }
 
+function cellPlainText(cell: NotionRichText[]): string {
+  return cell.map((rt) => rt.plain_text ?? "").join("").trim();
+}
+
+function isPriceTableRows(rows: Array<{ cells: NotionRichText[][] }>): boolean {
+  const flat = rows.flatMap((r) => r.cells.map((c) => cellPlainText(c as NotionRichText[])));
+  const joined = flat.join(" ").toLowerCase();
+  return (
+    (/precio|subtotal|i\.?\s*v\.?\s*a\.?|total/.test(joined) || joined.includes("$")) &&
+    rows.length <= 14
+  );
+}
+
+function tableExtraClasses(rows: Array<{ cells: NotionRichText[][] }>): string {
+  const classes = ["data-table"];
+  if (isPriceTableRows(rows)) classes.push("price-table", "table-keep-together");
+  else if (rows.length <= 8) classes.push("table-keep-together");
+  return classes.join(" ");
+}
+
+/** Filas de cierre financiero (Subtotal / I.V.A. / Total) para agrupar en tfoot. */
+function isFinancialSummaryRow(cells: NotionRichText[][]): boolean {
+  const label = cellPlainText(cells[0] ?? [])
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (label === "subtotal") return true;
+  if (/^i\.?\s*v\.?\s*a\.?$/.test(label)) return true;
+  return label === "total";
+}
+
+function looksLikeHeaderRow(cells: NotionRichText[][]): boolean {
+  const joined = cells.map((c) => cellPlainText(c)).join(" ").toLowerCase();
+  return /descripción|descripcion|precio|rol|cantidad|etapa|actividad|tiempo|módulo|modulo|#/.test(
+    joined
+  );
+}
+
 function tableToHtml(block: PropuestaBlock): string {
   const rows = block.__rows ?? [];
   if (rows.length === 0) return "";
   const tableData = block.table as { has_column_header?: boolean } | undefined;
-  const hasHeader = tableData?.has_column_header ?? true;
+  let hasHeader = tableData?.has_column_header ?? true;
+  if (!hasHeader && rows.length > 1 && looksLikeHeaderRow(rows[0].cells)) {
+    hasHeader = true;
+  }
 
   const renderRow = (cells: NotionRichText[][], tag: "th" | "td") =>
     `<tr>${cells.map((cell) => `<${tag}>${richTextToHtml(cell) || "&nbsp;"}</${tag}>`).join("")}</tr>`;
@@ -90,8 +131,29 @@ function tableToHtml(block: PropuestaBlock): string {
     head = `<thead>${renderRow(rows[0].cells, "th")}</thead>`;
     bodyRows = rows.slice(1);
   }
-  const body = `<tbody>${bodyRows.map((r) => renderRow(r.cells, "td")).join("")}</tbody>`;
-  return `<table class="data-table">${head}${body}</table>`;
+
+  const isPriceTable = isPriceTableRows(rows);
+  let dataRows = bodyRows;
+  let footerRows: typeof bodyRows = [];
+  if (isPriceTable) {
+    const splitAt = bodyRows.findIndex((r) => isFinancialSummaryRow(r.cells));
+    if (splitAt >= 0) {
+      dataRows = bodyRows.slice(0, splitAt);
+      footerRows = bodyRows.slice(splitAt);
+    }
+  }
+
+  const body = `<tbody>${dataRows.map((r) => renderRow(r.cells, "td")).join("")}</tbody>`;
+  const foot =
+    footerRows.length > 0
+      ? `<tfoot>${footerRows.map((r) => renderRow(r.cells, "td")).join("")}</tfoot>`
+      : "";
+  const className = tableExtraClasses(rows);
+  const tableHtml = `<table class="${className}">${head}${body}${foot}</table>`;
+
+  if (isPriceTable) return `<div class="price-table-wrap">${tableHtml}</div>`;
+  if (rows.length <= 8) return `<div class="table-wrap-keep">${tableHtml}</div>`;
+  return tableHtml;
 }
 
 const LIST_TYPES = new Set(["bulleted_list_item", "numbered_list_item"]);
@@ -190,8 +252,24 @@ export function blocksToHtml(blocks: PropuestaBlock[], allowSkip = false): strin
         if (block.__children) parts.push(blocksToHtml(block.__children));
         break;
       }
-      default:
+      case "to_do": {
+        const data = block.to_do as { checked?: boolean; rich_text?: NotionRichText[] };
+        const mark = data.checked ? "☑ " : "☐ ";
+        const inner = richTextToHtml(data.rich_text);
+        if (inner.trim()) parts.push(`<p>${mark}${inner}</p>`);
+        if (block.__children) parts.push(blocksToHtml(block.__children));
         break;
+      }
+      default: {
+        const inner = richTextToHtml(blockRichText(block));
+        if (inner.trim()) parts.push(`<p>${inner}</p>`);
+        else {
+          const plain = blockPlainText(block);
+          if (plain) parts.push(`<p>${escapeHtml(plain)}</p>`);
+        }
+        if (block.__children?.length) parts.push(blocksToHtml(block.__children));
+        break;
+      }
     }
     i++;
   }

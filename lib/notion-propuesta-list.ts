@@ -168,7 +168,7 @@ async function resolveBlocks(blockId: string, depth: number): Promise<PropuestaB
         item.__rows = rows
           .filter((r) => r.type === "table_row")
           .map((r) => ({ cells: (r.table_row as { cells: unknown[][] }).cells as never }));
-      } else if (block.has_children && depth < 3) {
+      } else if (block.has_children && depth < 8) {
         item.__children = await resolveBlocks(block.id, depth + 1);
       }
 
