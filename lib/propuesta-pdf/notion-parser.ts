@@ -331,3 +331,63 @@ export function parseProposalFromBlocks(
     requerimientos: parseRequerimientos(sections),
   };
 }
+
+/** Secciones ya cubiertas por las páginas fijas de metodología (portada → p.6). */
+const SKIP_DYNAMIC_HEADINGS = [
+  "metadatos de la propuesta",
+  "manticore labs",
+  "indice",
+  "objetivo",
+  "descripcion y metodologia",
+  "metodologia",
+  "responsabilidad del proveedor",
+  "responsabilidad del cliente",
+];
+
+function isSkipDynamicHeading(heading: string): boolean {
+  const n = normalize(heading);
+  if (!n) return false;
+  if (/^propuesta\b/.test(n)) return true;
+  return SKIP_DYNAMIC_HEADINGS.some((k) => n.includes(k));
+}
+
+/** Bloques de Notion para las páginas variables (desde Descripción de la solución). */
+export function filterDynamicContentBlocks(blocks: PropuestaBlock[]): PropuestaBlock[] {
+  const sections = splitIntoSections(blocks);
+  const out: PropuestaBlock[] = [];
+
+  for (const s of sections) {
+    if (isSkipDynamicHeading(s.heading)) continue;
+    if (s.heading) {
+      out.push({
+        type: "heading_2",
+        heading_2: { rich_text: [{ plain_text: s.heading }] },
+      });
+    }
+    out.push(...s.blocks);
+  }
+
+  return out;
+}
+
+function splitBlocksBySection(blocks: PropuestaBlock[]): PropuestaBlock[][] {
+  const groups: PropuestaBlock[][] = [];
+  let current: PropuestaBlock[] = [];
+
+  for (const block of blocks) {
+    if (block.type === "heading_1" || block.type === "heading_2") {
+      if (current.length > 0) groups.push(current);
+      current = [block];
+    } else {
+      current.push(block);
+    }
+  }
+  if (current.length > 0) groups.push(current);
+
+  return groups;
+}
+
+/** Agrupa bloques por sección para paginar con pie de página corporativo. */
+export function splitBlocksForPdfPages(blocks: PropuestaBlock[]): PropuestaBlock[][] {
+  return splitBlocksBySection(filterDynamicContentBlocks(blocks));
+}

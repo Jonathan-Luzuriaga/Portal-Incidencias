@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { renderHtmlToPdf, warmChromiumExecutable } from "@/lib/propuesta-pdf/render";
 import { getPropuestaContent } from "@/lib/notion-propuesta-list";
-import { buildProposalHtml } from "@/lib/propuesta-pdf/html";
+import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
+import { buildLiteralCorporateHtml } from "@/lib/propuesta-pdf/literal-template";
+import type { CorporateCover } from "@/lib/propuesta-pdf/corporate-types";
 import { ServiceError } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -39,11 +41,18 @@ export async function GET(request: Request): Promise<Response> {
       warmChromiumExecutable(),
     ]);
 
-    // Transcribe fielmente el contenido real de la propuesta en Notion.
-    // No se usa IA ni cálculos: las tablas, horas y precios se toman tal cual
-    // están escritos y aprobados en la página de Notion.
-    const html = buildProposalHtml(cover, blocks);
-    const pdf = await renderHtmlToPdf(html, { executablePath });
+    const corporateCover: CorporateCover = {
+      name: cover.name,
+      code: cover.code,
+      version: cover.version,
+      fecha: cover.fecha,
+      validezDias: Number(String(cover.validezDias).replace(/[^0-9]/g, "")) || 45,
+    };
+
+    // Plantilla corporativa fija (portada, índice, metodología) + contenido fiel de Notion.
+    const assets = loadCorporateAssets();
+    const html = buildLiteralCorporateHtml(corporateCover, blocks, assets);
+    const pdf = await renderHtmlToPdf(html, { preferCSSPageSize: true, executablePath });
 
     const body = new Uint8Array(pdf);
 
