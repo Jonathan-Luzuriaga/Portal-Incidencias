@@ -30,36 +30,22 @@ function docFooter(pageNum: number): string {
   return `<footer class="doc-footer"><a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a><span>${pageNum}</span></footer>`;
 }
 
-/** Contenido variable: un solo flujo continuo (Chromium pagina en A4 sin cajas fijas por sección). */
+/** Fuente sin paginar; paginateProposalFlow() la convierte en páginas A4 en render.ts */
 const PROPOSAL_FLOW_CSS = `
 .proposal-flow {
   width: 794px;
-  position: relative;
-  background: var(--page-bg);
   box-sizing: border-box;
-  padding: 54px 80px 64px 60px;
-  break-before: page;
-  page-break-before: always;
+  padding: 54px 80px 0 60px;
 }
 .proposal-flow .section-title,
 .proposal-flow .subsection-title {
   break-after: avoid;
   page-break-after: avoid;
 }
-.proposal-flow .section-title + *,
-.proposal-flow .subsection-title + * {
-  break-before: avoid;
-  page-break-before: avoid;
-}
 .proposal-flow p,
 .proposal-flow li {
   orphans: 3;
   widows: 3;
-}
-.proposal-flow ul,
-.proposal-flow ol {
-  break-inside: auto;
-  page-break-inside: auto;
 }
 .proposal-flow .data-table {
   width: 100%;
@@ -88,18 +74,22 @@ const PROPOSAL_FLOW_CSS = `
   color: #ffffff;
   font-weight: 700;
 }
-@media print {
-  .flow-print-footer {
-    position: fixed;
-    bottom: 18px;
-    left: 60px;
-    right: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    z-index: 9999;
-  }
+.page-flow-chunk .page-inner-standard {
+  height: calc(100% - 36px);
+  overflow: hidden;
+}
+.page-flow-tall {
+  height: auto;
+  min-height: 1122px;
+  overflow: visible;
+  page-break-inside: auto;
+}
+.page-flow-tall .page-inner-standard {
+  height: auto;
+  overflow: visible;
+}
+.page-flow-tall .data-table {
+  page-break-inside: auto;
 }
 `;
 
@@ -246,11 +236,8 @@ function buildDynamicFlow(blocks: PropuestaBlock[]): string {
   if (!inner.trim()) return "";
 
   return `
-    <div class="proposal-flow page-standard">
+    <div class="proposal-flow">
 ${inner}
-    </div>
-    <div class="flow-print-footer" aria-hidden="true">
-      <a href="mailto:info@manticore-labs.com">info@manticore-labs.com</a>
     </div>`;
 }
 

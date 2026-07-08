@@ -1,5 +1,6 @@
 import { ServiceError } from "../types";
 import { measurePages, logMeasureReport } from "./measure";
+import { paginateProposalFlow } from "./paginate-flow";
 
 export interface RenderPdfOptions {
   /**
@@ -183,6 +184,12 @@ async function renderHtmlToPdfInner(html: string, options: RenderPdfOptions = {}
       });
     } catch {
       // fuentes web no críticas; continuar con fallback del sistema
+    }
+
+    try {
+      await paginateProposalFlow(page);
+    } catch (err) {
+      console.warn("[render] No se pudo paginar proposal-flow:", err);
     }
 
     if (options.preferCSSPageSize) {

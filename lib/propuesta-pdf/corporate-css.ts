@@ -340,5 +340,10 @@ p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; page-break-inside: avoi
   display: table-header-group;
 }
 
+.page-flow-chunk {
+  break-before: page;
+  page-break-before: always;
+}
+
 @page { size: A4; margin: 0; }
 `;
