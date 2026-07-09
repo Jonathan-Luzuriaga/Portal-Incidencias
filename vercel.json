@@ -8,6 +8,9 @@
     },
     "app/api/propuestas/pdf/download/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/proformas/pdf/route.ts": {
+      "maxDuration": 120
     }
   },
   "headers": [

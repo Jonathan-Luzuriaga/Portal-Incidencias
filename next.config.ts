@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   // serverless que genera el PDF (se leen vía fs y se incrustan como base64).
   outputFileTracingIncludes: {
     "/api/propuestas/pdf": ["./public/propuestas-assets/**"],
+    "/api/proformas/pdf": ["./public/propuestas-assets/**"],
   },
   async headers() {
     return [
