@@ -5,6 +5,7 @@ import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import {
   copyTextToClipboard,
   isEmbeddedInFrame,
+  openPdfInNewTab,
   toAbsoluteUrl,
 } from "@/lib/embed-download";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
@@ -37,29 +38,6 @@ function buildPreviewUrl(pageId: string): string {
 
 function buildDownloadUrl(pageId: string): string {
   return `/api/propuestas/pdf/download?pageId=${encodeURIComponent(pageId)}`;
-}
-
-function parseFilenameFromDisposition(header: string): string {
-  const utf8Match = header.match(/filename\*=UTF-8''([^;\s]+)/i)?.[1];
-  if (utf8Match) {
-    try {
-      return decodeURIComponent(utf8Match);
-    } catch {
-      // continuar
-    }
-  }
-  return header.match(/filename="([^"]+)"/)?.[1] ?? "Propuesta.pdf";
-}
-
-function triggerBlobDownload(blob: Blob, filename: string): void {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 async function fetchWithTimeout(url: string): Promise<Response> {
@@ -178,33 +156,17 @@ export default function ProposalWorkflowPdfGenerator() {
   }, [selected, loadingList, loadPreview]);
 
   async function handleDownload() {
-    if (!selected || busy || embedded) return;
+    if (!selected || busy) return;
     setErrorMsg("");
     setCopied(false);
-    setStatus("loading_pdf");
-    try {
-      const res = await fetchWithTimeout(buildDownloadUrl(selected));
-      if (!res.ok) {
-        throw new Error(await parseErrorResponse(res));
-      }
 
-      const contentType = res.headers.get("Content-Type") ?? "";
-      if (!contentType.includes("application/pdf")) {
-        throw new Error("La respuesta no fue un PDF.");
-      }
+    const opened = openPdfInNewTab(buildDownloadUrl(selected));
+    if (opened) return;
 
-      const blob = await res.blob();
-      if (blob.size === 0) {
-        throw new Error("El PDF llegó vacío.");
-      }
-
-      const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
-      triggerBlobDownload(blob, filename);
-      setStatus(previewHtml ? "preview_ready" : "idle");
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "No se pudo descargar el PDF.");
-      setStatus("error");
-    }
+    setErrorMsg(
+      "El navegador bloqueó la pestaña nueva. Usa “Copiar enlace” o permite ventanas emergentes."
+    );
+    setStatus("error");
   }
 
   async function handleCopyLink() {
@@ -279,11 +241,10 @@ export default function ProposalWorkflowPdfGenerator() {
         )}
 
         {embedded && selected ? (
-          <div className="mt-3 space-y-2 rounded-md border border-[#f5e6b3] bg-[#fffbeb] px-3 py-2 text-sm text-[#37352f]">
+          <div className="mt-3 space-y-2 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
             <p>
-              Notion bloquea descargas, popups y salir del iframe (CSP). Usa{" "}
-              <strong>Descargar PDF</strong> para abrir el archivo en este panel, o copia el enlace y
-              ábrelo en una pestaña nueva.
+              El PDF se abre en una <strong>pestaña nueva</strong>. Si el navegador la bloquea, copia el
+              enlace y ábrelo manualmente.
             </p>
             <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
               {toAbsoluteUrl(buildDownloadUrl(selected))}
@@ -308,24 +269,14 @@ export default function ProposalWorkflowPdfGenerator() {
             {status === "loading_preview" && <Spinner />}
             Actualizar vista previa
           </button>
-          {embedded && selected ? (
-            <a
-              href={toAbsoluteUrl(buildDownloadUrl(selected))}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1]"
-            >
-              Descargar PDF
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={busy || !selected || propuestas.length === 0}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {status === "loading_pdf" && <Spinner />}
-              {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={!selected || propuestas.length === 0 || status === "loading_preview"}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            Descargar PDF
+          </button>
         </div>
       </div>
 
