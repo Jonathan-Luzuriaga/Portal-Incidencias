@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
+import {
+  isEmbeddedInFrame,
+  openPdfOutsideSandbox,
+  toAbsoluteUrl,
+} from "@/lib/embed-download";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 
 type Status = "idle" | "loading_preview" | "loading_pdf" | "preview_ready" | "error";
@@ -31,19 +36,6 @@ function buildPreviewUrl(pageId: string): string {
 
 function buildDownloadUrl(pageId: string): string {
   return `/api/propuestas/pdf/download?pageId=${encodeURIComponent(pageId)}`;
-}
-
-function toAbsoluteUrl(path: string): string {
-  if (typeof window === "undefined") return path;
-  return new URL(path, window.location.origin).href;
-}
-
-function isEmbeddedInFrame(): boolean {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
 }
 
 function parseFilenameFromDisposition(header: string): string {
@@ -184,10 +176,16 @@ export default function ProposalWorkflowPdfGenerator() {
   }, [selected, loadingList, loadPreview]);
 
   async function handleDownload() {
-    if (!selected || busy || embedded) return;
+    if (!selected || busy) return;
     setErrorMsg("");
-    setStatus("loading_pdf");
 
+    // Dentro de Notion: salir del sandbox navegando la ventana superior a la URL real.
+    if (embedded) {
+      openPdfOutsideSandbox(buildDownloadUrl(selected));
+      return;
+    }
+
+    setStatus("loading_pdf");
     try {
       const res = await fetchWithTimeout(buildDownloadUrl(selected));
       if (!res.ok) {
@@ -275,7 +273,8 @@ export default function ProposalWorkflowPdfGenerator() {
 
         {embedded && selected ? (
           <div className="mt-3 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-            Estás dentro de Notion. La descarga se abre en una pestaña nueva (puede tardar hasta 1 minuto).
+            Estás dentro de Notion. Al descargar se abrirá el PDF fuera del embed (puede tardar hasta 1
+            minuto). Luego puedes volver a esta página en Notion.
           </div>
         ) : null}
 
@@ -289,39 +288,27 @@ export default function ProposalWorkflowPdfGenerator() {
             {status === "loading_preview" && <Spinner />}
             Actualizar vista previa
           </button>
-          {/* En Notion: <a> real; el click programático suele bloquearse en el iframe. */}
-          {embedded && selected ? (
-            <a
-              href={toAbsoluteUrl(buildDownloadUrl(selected))}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1]"
-            >
-              Descargar PDF
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={busy || !selected || propuestas.length === 0}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {status === "loading_pdf" && <Spinner />}
-              {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={busy || !selected || propuestas.length === 0}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {status === "loading_pdf" && <Spinner />}
+            {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
+          </button>
         </div>
 
         {embedded && selected ? (
           <p className="mt-2 text-center text-xs text-[#787774]">
-            Si el botón no abre nada,{" "}
+            Si no descarga,{" "}
             <a
               href={toAbsoluteUrl(buildDownloadUrl(selected))}
-              target="_blank"
+              target="_top"
               rel="noopener noreferrer"
               className="font-medium text-[#2383e2] underline"
             >
-              abre la descarga aquí
+              ábrelo aquí
             </a>
             .
           </p>

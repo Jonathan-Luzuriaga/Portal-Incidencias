@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructurar/route";
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
+import { isEmbeddedInFrame } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
@@ -93,14 +94,6 @@ function PrefixedInput({
       ) : null}
     </div>
   );
-}
-
-function isEmbeddedInFrame(): boolean {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
 }
 
 function mapActividadesFromApi(
@@ -270,11 +263,17 @@ export default function ProformasPage() {
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+
+      if (embedded) {
+        // blob: no sirve en window.top (cross-origin con Notion). Abrir en el propio frame.
+        window.location.href = url;
+        setPdfStatus("opened_tab");
+        return;
+      }
+
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `${codigoProyecto}.pdf`;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -570,7 +569,9 @@ export default function ProformasPage() {
 
             {pdfStatus === "opened_tab" ? (
               <p className="mt-3 text-xs text-[#787774]">
-                PDF generado. Si no se descargó, revisa los permisos del navegador o bloqueadores de ventanas.
+                {embedded
+                  ? "Abriendo el PDF fuera del embed de Notion. Luego puedes volver a esta página."
+                  : "PDF generado. Si no se descargó, revisa los permisos del navegador o bloqueadores de ventanas."}
               </p>
             ) : null}
 
@@ -582,7 +583,7 @@ export default function ProformasPage() {
 
             {embedded ? (
               <p className="mt-2 text-center text-xs text-[#9b9a97]">
-                Dentro de Notion la descarga puede abrirse en otra pestaña.
+                Dentro de Notion la descarga sale del embed para evitar el bloqueo del sandbox.
               </p>
             ) : null}
           </section>
