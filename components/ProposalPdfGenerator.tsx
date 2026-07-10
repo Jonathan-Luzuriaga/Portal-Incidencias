@@ -3,9 +3,15 @@
 import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
+import { RequiredMark } from "@/components/RequiredMark";
+import {
+  isEmbeddedInFrame,
+  openPdfOutsideSandbox,
+  toAbsoluteUrl,
+} from "@/lib/embed-download";
 import { PROPUESTA_STANDARD_GUIDE } from "@/lib/propuesta-pdf/propuesta-standardize";
 
-type Status = "idle" | "loading" | "error" | "opened_tab";
+type Status = "idle" | "loading" | "error" | "opened_top";
 
 const DOWNLOAD_TIMEOUT_MS = 130_000;
 
@@ -31,19 +37,6 @@ function Spinner() {
 
 function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
-}
-
-function toAbsoluteUrl(path: string): string {
-  if (typeof window === "undefined") return path;
-  return new URL(path, window.location.origin).href;
-}
-
-function isEmbeddedInFrame(): boolean {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
 }
 
 function parseFilenameFromDisposition(header: string): string {
@@ -182,18 +175,27 @@ export default function ProposalPdfGenerator() {
     };
   }, []);
 
-  async function handleDownload() {
-    if (!selected || generating || embedded) return;
+  function handleDownload() {
+    if (!selected || generating || !canDownload) return;
     setErrorMsg("");
-    setStatus("loading");
 
-    try {
-      await downloadViaFetch(buildPdfUrl(selected));
-      setStatus("idle");
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
-      setStatus("error");
+    // Dentro de Notion: salir del sandbox navegando la ventana superior a la URL real del PDF.
+    if (embedded) {
+      openPdfOutsideSandbox(buildPdfUrl(selected));
+      setStatus("opened_top");
+      return;
     }
+
+    setStatus("loading");
+    void (async () => {
+      try {
+        await downloadViaFetch(buildPdfUrl(selected));
+        setStatus("idle");
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
+        setStatus("error");
+      }
+    })();
   }
 
   return (
@@ -203,6 +205,7 @@ export default function ProposalPdfGenerator() {
       <div>
         <label htmlFor="propuesta-select" className={labelClasses}>
           Propuesta
+          <RequiredMark />
         </label>
         {loadingList ? (
           <p className="text-sm text-[#9b9a97]">Cargando propuestas…</p>
@@ -246,8 +249,14 @@ export default function ProposalPdfGenerator() {
 
       {embedded && canDownload ? (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Estás dentro de Notion. La descarga debe abrirse en una pestaña nueva (puede tardar hasta 1
-          minuto). Si el navegador la bloquea, usa el enlace de abajo.
+          Estás dentro de Notion. Al descargar se abrirá el PDF fuera del embed (puede tardar hasta 1
+          minuto). Luego puedes volver a esta página en Notion.
+        </div>
+      ) : null}
+
+      {status === "opened_top" && embedded ? (
+        <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
+          Abriendo el PDF fuera del embed… Si no ocurre nada, usa el enlace de abajo.
         </div>
       ) : null}
 
@@ -257,47 +266,26 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      {/*
-        En Notion el iframe bloquea window.open / click programático.
-        Un <a target="_blank"> real sí funciona con el gesto del usuario.
-      */}
-      {embedded ? (
-        canDownload && pdfAbsoluteUrl ? (
-          <a
-            href={pdfAbsoluteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={primaryBtnClasses}
-          >
-            Descargar PDF
-          </a>
-        ) : (
-          <button type="button" disabled className={primaryBtnClasses}>
-            Descargar PDF
-          </button>
-        )
-      ) : (
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={generating || !canDownload}
-          className={primaryBtnClasses}
-        >
-          {generating && <Spinner />}
-          {generating ? "Generando PDF…" : "Descargar PDF"}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={generating || !canDownload}
+        className={primaryBtnClasses}
+      >
+        {generating && <Spinner />}
+        {generating ? "Generando PDF…" : "Descargar PDF"}
+      </button>
 
       {embedded && canDownload && pdfAbsoluteUrl ? (
         <p className="text-center text-xs text-[#787774]">
-          Si el botón no abre nada,{" "}
+          Si no descarga,{" "}
           <a
             href={pdfAbsoluteUrl}
-            target="_blank"
+            target="_top"
             rel="noopener noreferrer"
             className="font-medium text-[#2383e2] underline"
           >
-            abre la descarga aquí
+            ábrelo aquí
           </a>
           .
         </p>

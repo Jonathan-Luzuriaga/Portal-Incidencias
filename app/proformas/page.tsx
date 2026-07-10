@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructurar/route";
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
+import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
+import { isEmbeddedInFrame } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
@@ -93,14 +95,6 @@ function PrefixedInput({
       ) : null}
     </div>
   );
-}
-
-function isEmbeddedInFrame(): boolean {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
 }
 
 function mapActividadesFromApi(
@@ -270,11 +264,17 @@ export default function ProformasPage() {
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+
+      if (embedded) {
+        // blob: no sirve en window.top (cross-origin con Notion). Abrir en el propio frame.
+        window.location.href = url;
+        setPdfStatus("opened_tab");
+        return;
+      }
+
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `${codigoProyecto}.pdf`;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -300,10 +300,12 @@ export default function ProformasPage() {
         <div className="order-1 space-y-6">
           <section className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5 shadow-[0_1px_2px_rgba(15,15,15,0.04)]">
             <SectionTitle>Ingesta</SectionTitle>
+            <RequiredLegend />
 
             <div>
               <label htmlFor="texto-bruto" className={labelClasses}>
                 Idea o requerimiento del cliente
+                <RequiredMark />
               </label>
               <textarea
                 id="texto-bruto"
@@ -376,11 +378,13 @@ export default function ProformasPage() {
 
           <section className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5 shadow-[0_1px_2px_rgba(15,15,15,0.04)]">
             <SectionTitle>Detalle de la proforma</SectionTitle>
+            <RequiredLegend />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="codigo-proyecto" className={labelClasses}>
                   Código proyecto
+                  <RequiredMark />
                 </label>
                 <PrefixedInput
                   id="codigo-proyecto"
@@ -396,6 +400,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="codigo-estimacion" className={labelClasses}>
                   Nº estimación
+                  <RequiredMark />
                 </label>
                 <PrefixedInput
                   id="codigo-estimacion"
@@ -412,6 +417,7 @@ export default function ProformasPage() {
             <div>
               <label htmlFor="descripcion" className={labelClasses}>
                 Descripción del alcance
+                <RequiredMark />
               </label>
               <textarea
                 id="descripcion"
@@ -427,6 +433,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="horas" className={labelClasses}>
                   Horas totales
+                  <RequiredMark />
                 </label>
                 <input
                   id="horas"
@@ -446,6 +453,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="perfil" className={labelClasses}>
                   Perfil
+                  <RequiredMark />
                 </label>
                 <select
                   id="perfil"
@@ -570,7 +578,9 @@ export default function ProformasPage() {
 
             {pdfStatus === "opened_tab" ? (
               <p className="mt-3 text-xs text-[#787774]">
-                PDF generado. Si no se descargó, revisa los permisos del navegador o bloqueadores de ventanas.
+                {embedded
+                  ? "Abriendo el PDF fuera del embed de Notion. Luego puedes volver a esta página."
+                  : "PDF generado. Si no se descargó, revisa los permisos del navegador o bloqueadores de ventanas."}
               </p>
             ) : null}
 
@@ -582,7 +592,7 @@ export default function ProformasPage() {
 
             {embedded ? (
               <p className="mt-2 text-center text-xs text-[#9b9a97]">
-                Dentro de Notion la descarga puede abrirse en otra pestaña.
+                Dentro de Notion la descarga sale del embed para evitar el bloqueo del sandbox.
               </p>
             ) : null}
           </section>
