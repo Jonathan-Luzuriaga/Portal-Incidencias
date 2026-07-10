@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import ProposalPdfGenerator from "@/components/ProposalPdfGenerator";
 import ProposalUploadForm from "@/components/ProposalUploadForm";
+import ProposalWorkflowPdfGenerator from "@/components/ProposalWorkflowPdfGenerator";
 
 type Tab = "pdf" | "upload";
 
@@ -41,7 +41,7 @@ export default function PropuestasWorkspace() {
         </button>
       </div>
 
-      {tab === "upload" ? <ProposalUploadForm /> : <ProposalPdfGenerator />}
+      {tab === "upload" ? <ProposalUploadForm /> : <ProposalWorkflowPdfGenerator />}
     </div>
   );
 }

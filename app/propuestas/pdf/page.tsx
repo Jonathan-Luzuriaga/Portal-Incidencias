@@ -23,9 +23,9 @@ export default function PropuestasPdfPage() {
       <header className="mb-5">
         <h1 className="text-lg font-semibold text-[#37352f]">PDF de propuesta</h1>
         <p className="mt-1 text-sm text-[#787774]">
-          Selecciona una tarea de Notion con categoría Propuesta. El sistema lee el contenido,
-          aplica la plantilla corporativa del workflow (tablas fijas, 9 actividades, precios
-          calculados) y te muestra la vista previa antes de descargar.
+          Selecciona una tarea de Notion con categoría Propuesta. El sistema lee el contenido
+          literal, lo coloca sobre la plantilla corporativa y te muestra la vista previa antes
+          de descargar. También disponible en la pestaña Generar PDF de /propuestas.
         </p>
       </header>
       <Suspense fallback={<LoadingFallback />}>
