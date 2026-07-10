@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
-import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 import { RequiredMark } from "@/components/RequiredMark";
+import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 import {
+  copyTextToClipboard,
   isEmbeddedInFrame,
-  openPdfOutsideSandbox,
   toAbsoluteUrl,
 } from "@/lib/embed-download";
 import { PROPUESTA_STANDARD_GUIDE } from "@/lib/propuesta-pdf/propuesta-standardize";
 
-type Status = "idle" | "loading" | "error" | "opened_top";
+type Status = "idle" | "loading" | "error";
 
 const DOWNLOAD_TIMEOUT_MS = 130_000;
 
@@ -142,6 +142,7 @@ export default function ProposalPdfGenerator() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [embedded, setEmbedded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const generating = status === "loading";
   const pdfAbsoluteUrl = selected ? toAbsoluteUrl(buildPdfUrl(selected)) : "";
@@ -176,16 +177,9 @@ export default function ProposalPdfGenerator() {
   }, []);
 
   function handleDownload() {
-    if (!selected || generating || !canDownload) return;
+    if (!selected || generating || !canDownload || embedded) return;
     setErrorMsg("");
-
-    // Dentro de Notion: salir del sandbox navegando la ventana superior a la URL real del PDF.
-    if (embedded) {
-      openPdfOutsideSandbox(buildPdfUrl(selected));
-      setStatus("opened_top");
-      return;
-    }
-
+    setCopied(false);
     setStatus("loading");
     void (async () => {
       try {
@@ -196,6 +190,16 @@ export default function ProposalPdfGenerator() {
         setStatus("error");
       }
     })();
+  }
+
+  async function handleCopyLink() {
+    if (!pdfAbsoluteUrl) return;
+    const ok = await copyTextToClipboard(pdfAbsoluteUrl);
+    setCopied(ok);
+    if (!ok) {
+      setErrorMsg("No se pudo copiar. Selecciona y copia el enlace manualmente.");
+      setStatus("error");
+    }
   }
 
   return (
@@ -224,6 +228,7 @@ export default function ProposalPdfGenerator() {
               setSelected(e.target.value);
               setStatus("idle");
               setErrorMsg("");
+              setCopied(false);
             }}
             className={fieldClasses}
           >
@@ -248,15 +253,22 @@ export default function ProposalPdfGenerator() {
       )}
 
       {embedded && canDownload ? (
-        <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Estás dentro de Notion. Al descargar se abrirá el PDF fuera del embed (puede tardar hasta 1
-          minuto). Luego puedes volver a esta página en Notion.
-        </div>
-      ) : null}
-
-      {status === "opened_top" && embedded ? (
-        <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Abriendo el PDF fuera del embed… Si no ocurre nada, usa el enlace de abajo.
+        <div className="space-y-2 rounded-md border border-[#f5e6b3] bg-[#fffbeb] px-3 py-2 text-sm text-[#37352f]">
+          <p>
+            Notion bloquea descargas, popups y salir del iframe (CSP). Usa{" "}
+            <strong>Descargar PDF</strong> para abrir el archivo en este panel, o copia el enlace y
+            ábrelo en una pestaña nueva del navegador.
+          </p>
+          <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
+            {pdfAbsoluteUrl}
+          </p>
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
+          >
+            {copied ? "Enlace copiado" : "Copiar enlace del PDF"}
+          </button>
         </div>
       ) : null}
 
@@ -266,30 +278,21 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={generating || !canDownload}
-        className={primaryBtnClasses}
-      >
-        {generating && <Spinner />}
-        {generating ? "Generando PDF…" : "Descargar PDF"}
-      </button>
-
       {embedded && canDownload && pdfAbsoluteUrl ? (
-        <p className="text-center text-xs text-[#787774]">
-          Si no descarga,{" "}
-          <a
-            href={pdfAbsoluteUrl}
-            target="_top"
-            rel="noopener noreferrer"
-            className="font-medium text-[#2383e2] underline"
-          >
-            ábrelo aquí
-          </a>
-          .
-        </p>
-      ) : null}
+        <a href={pdfAbsoluteUrl} className={primaryBtnClasses}>
+          Descargar PDF
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={generating || !canDownload}
+          className={primaryBtnClasses}
+        >
+          {generating && <Spinner />}
+          {generating ? "Generando PDF…" : "Descargar PDF"}
+        </button>
+      )}
     </div>
   );
 }
