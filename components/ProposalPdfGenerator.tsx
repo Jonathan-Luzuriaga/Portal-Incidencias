@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
+import { RequiredMark } from "@/components/RequiredMark";
 import {
   isEmbeddedInFrame,
   openPdfOutsideSandbox,
@@ -204,6 +205,7 @@ export default function ProposalPdfGenerator() {
       <div>
         <label htmlFor="propuesta-select" className={labelClasses}>
           Propuesta
+          <RequiredMark />
         </label>
         {loadingList ? (
           <p className="text-sm text-[#9b9a97]">Cargando propuestas…</p>

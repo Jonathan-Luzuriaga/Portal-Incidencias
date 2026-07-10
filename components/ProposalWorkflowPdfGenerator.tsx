@@ -8,6 +8,7 @@ import {
   toAbsoluteUrl,
 } from "@/lib/embed-download";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
+import { RequiredMark } from "@/components/RequiredMark";
 
 type Status = "idle" | "loading_preview" | "loading_pdf" | "preview_ready" | "error";
 
@@ -222,6 +223,7 @@ export default function ProposalWorkflowPdfGenerator() {
         <div>
           <label htmlFor="workflow-propuesta-select" className={labelClasses}>
             Propuesta en Notion
+            <RequiredMark />
           </label>
           {loadingList ? (
             <p className="text-sm text-[#9b9a97]">Cargando propuestas…</p>

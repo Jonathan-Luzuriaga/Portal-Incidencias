@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructurar/route";
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
+import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
 import { isEmbeddedInFrame } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
@@ -299,10 +300,12 @@ export default function ProformasPage() {
         <div className="order-1 space-y-6">
           <section className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5 shadow-[0_1px_2px_rgba(15,15,15,0.04)]">
             <SectionTitle>Ingesta</SectionTitle>
+            <RequiredLegend />
 
             <div>
               <label htmlFor="texto-bruto" className={labelClasses}>
                 Idea o requerimiento del cliente
+                <RequiredMark />
               </label>
               <textarea
                 id="texto-bruto"
@@ -375,11 +378,13 @@ export default function ProformasPage() {
 
           <section className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5 shadow-[0_1px_2px_rgba(15,15,15,0.04)]">
             <SectionTitle>Detalle de la proforma</SectionTitle>
+            <RequiredLegend />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="codigo-proyecto" className={labelClasses}>
                   Código proyecto
+                  <RequiredMark />
                 </label>
                 <PrefixedInput
                   id="codigo-proyecto"
@@ -395,6 +400,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="codigo-estimacion" className={labelClasses}>
                   Nº estimación
+                  <RequiredMark />
                 </label>
                 <PrefixedInput
                   id="codigo-estimacion"
@@ -411,6 +417,7 @@ export default function ProformasPage() {
             <div>
               <label htmlFor="descripcion" className={labelClasses}>
                 Descripción del alcance
+                <RequiredMark />
               </label>
               <textarea
                 id="descripcion"
@@ -426,6 +433,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="horas" className={labelClasses}>
                   Horas totales
+                  <RequiredMark />
                 </label>
                 <input
                   id="horas"
@@ -445,6 +453,7 @@ export default function ProformasPage() {
               <div>
                 <label htmlFor="perfil" className={labelClasses}>
                   Perfil
+                  <RequiredMark />
                 </label>
                 <select
                   id="perfil"
