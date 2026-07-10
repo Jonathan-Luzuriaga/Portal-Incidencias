@@ -17,6 +17,9 @@ const fieldClasses =
   "focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
+const primaryBtnClasses =
+  "inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70";
+
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin text-current" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -66,17 +69,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-function openPdfDownload(path: string): void {
-  const href = toAbsoluteUrl(path);
-  const anchor = document.createElement("a");
-  anchor.href = href;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
 async function downloadViaFetch(url: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
@@ -107,31 +99,11 @@ async function downloadViaFetch(url: string): Promise<void> {
     }
 
     const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
-    if (isEmbeddedInFrame()) {
-      throw new Error("EMBED_SANDBOX");
-    }
     triggerBlobDownload(blob, filename);
   } catch (err) {
     window.clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error("La generación tardó demasiado. Intenta de nuevo.");
-    }
-    throw err;
-  }
-}
-
-async function downloadPdf(url: string): Promise<"blob" | "tab"> {
-  if (isEmbeddedInFrame()) {
-    openPdfDownload(url);
-    return "tab";
-  }
-  try {
-    await downloadViaFetch(url);
-    return "blob";
-  } catch (err) {
-    if (err instanceof Error && err.message === "EMBED_SANDBOX") {
-      openPdfDownload(url);
-      return "tab";
     }
     throw err;
   }
@@ -180,6 +152,7 @@ export default function ProposalPdfGenerator() {
 
   const generating = status === "loading";
   const pdfAbsoluteUrl = selected ? toAbsoluteUrl(buildPdfUrl(selected)) : "";
+  const canDownload = Boolean(selected) && propuestas.length > 0 && !loadingList;
 
   useEffect(() => {
     setEmbedded(isEmbeddedInFrame());
@@ -210,21 +183,13 @@ export default function ProposalPdfGenerator() {
   }, []);
 
   async function handleDownload() {
-    if (!selected || generating) return;
+    if (!selected || generating || embedded) return;
     setErrorMsg("");
-
-    const url = buildPdfUrl(selected);
-
-    if (isEmbeddedInFrame()) {
-      openPdfDownload(url);
-      setStatus("opened_tab");
-      return;
-    }
-
     setStatus("loading");
+
     try {
-      const mode = await downloadPdf(url);
-      setStatus(mode === "tab" ? "opened_tab" : "idle");
+      await downloadViaFetch(buildPdfUrl(selected));
+      setStatus("idle");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
       setStatus("error");
@@ -252,7 +217,11 @@ export default function ProposalPdfGenerator() {
             id="propuesta-select"
             value={selected}
             disabled={generating}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setStatus("idle");
+              setErrorMsg("");
+            }}
             className={fieldClasses}
           >
             {propuestas.map((p) => (
@@ -275,21 +244,12 @@ export default function ProposalPdfGenerator() {
         </p>
       )}
 
-      {status === "opened_tab" && (
+      {embedded && canDownload ? (
         <div className="rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-          Se abrió una pestaña para generar y descargar el PDF. Espera hasta 1 minuto.
-          {pdfAbsoluteUrl ? (
-            <>
-              {" "}
-              Si no se abrió,{" "}
-              <a href={pdfAbsoluteUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-[#2383e2] underline">
-                haz clic aquí
-              </a>
-              .
-            </>
-          ) : null}
+          Estás dentro de Notion. La descarga debe abrirse en una pestaña nueva (puede tardar hasta 1
+          minuto). Si el navegador la bloquea, usa el enlace de abajo.
         </div>
-      )}
+      ) : null}
 
       {status === "error" && (
         <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a] whitespace-pre-wrap">
@@ -297,19 +257,49 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={generating || !selected || propuestas.length === 0}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {generating && <Spinner />}
-        {generating ? "Generando PDF…" : "Descargar PDF"}
-      </button>
+      {/*
+        En Notion el iframe bloquea window.open / click programático.
+        Un <a target="_blank"> real sí funciona con el gesto del usuario.
+      */}
+      {embedded ? (
+        canDownload && pdfAbsoluteUrl ? (
+          <a
+            href={pdfAbsoluteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={primaryBtnClasses}
+          >
+            Descargar PDF
+          </a>
+        ) : (
+          <button type="button" disabled className={primaryBtnClasses}>
+            Descargar PDF
+          </button>
+        )
+      ) : (
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={generating || !canDownload}
+          className={primaryBtnClasses}
+        >
+          {generating && <Spinner />}
+          {generating ? "Generando PDF…" : "Descargar PDF"}
+        </button>
+      )}
 
-      {embedded && selected && pdfAbsoluteUrl ? (
-        <p className="text-center text-xs text-[#9b9a97]">
-          Dentro de Notion la descarga se abre en otra pestaña del navegador.
+      {embedded && canDownload && pdfAbsoluteUrl ? (
+        <p className="text-center text-xs text-[#787774]">
+          Si el botón no abre nada,{" "}
+          <a
+            href={pdfAbsoluteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-[#2383e2] underline"
+          >
+            abre la descarga aquí
+          </a>
+          .
         </p>
       ) : null}
     </div>
