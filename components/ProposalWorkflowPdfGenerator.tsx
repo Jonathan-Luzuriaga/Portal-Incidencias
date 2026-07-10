@@ -69,17 +69,6 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-function openInNewTab(path: string): void {
-  const href = toAbsoluteUrl(path);
-  const anchor = document.createElement("a");
-  anchor.href = href;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -195,19 +184,12 @@ export default function ProposalWorkflowPdfGenerator() {
   }, [selected, loadingList, loadPreview]);
 
   async function handleDownload() {
-    if (!selected || busy) return;
+    if (!selected || busy || embedded) return;
     setErrorMsg("");
-
-    const url = buildDownloadUrl(selected);
-
-    if (isEmbeddedInFrame()) {
-      openInNewTab(url);
-      return;
-    }
-
     setStatus("loading_pdf");
+
     try {
-      const res = await fetchWithTimeout(url);
+      const res = await fetchWithTimeout(buildDownloadUrl(selected));
       if (!res.ok) {
         throw new Error(await parseErrorResponse(res));
       }
@@ -291,6 +273,12 @@ export default function ProposalWorkflowPdfGenerator() {
           </div>
         )}
 
+        {embedded && selected ? (
+          <div className="mt-3 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
+            Estás dentro de Notion. La descarga se abre en una pestaña nueva (puede tardar hasta 1 minuto).
+          </div>
+        ) : null}
+
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
@@ -301,20 +289,41 @@ export default function ProposalWorkflowPdfGenerator() {
             {status === "loading_preview" && <Spinner />}
             Actualizar vista previa
           </button>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={busy || !selected || propuestas.length === 0}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {status === "loading_pdf" && <Spinner />}
-            {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
-          </button>
+          {/* En Notion: <a> real; el click programático suele bloquearse en el iframe. */}
+          {embedded && selected ? (
+            <a
+              href={toAbsoluteUrl(buildDownloadUrl(selected))}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1]"
+            >
+              Descargar PDF
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={busy || !selected || propuestas.length === 0}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {status === "loading_pdf" && <Spinner />}
+              {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
+            </button>
+          )}
         </div>
 
         {embedded && selected ? (
-          <p className="mt-2 text-center text-xs text-[#9b9a97]">
-            Dentro de Notion la descarga se abre en otra pestaña del navegador.
+          <p className="mt-2 text-center text-xs text-[#787774]">
+            Si el botón no abre nada,{" "}
+            <a
+              href={toAbsoluteUrl(buildDownloadUrl(selected))}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#2383e2] underline"
+            >
+              abre la descarga aquí
+            </a>
+            .
           </p>
         ) : null}
       </div>
