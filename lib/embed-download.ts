@@ -1,14 +1,6 @@
 /**
- * Helpers para descargas PDF dentro del embed de Notion.
- *
- * Notion embebe la app en un iframe con sandbox + CSP propios.
- * - blob: / <a download> → bloqueados (sin allow-downloads)
- * - window.open / target=_blank → suelen bloquearse (sin allow-popups)
- * - window.top.location / target=_top → Notion lo bloquea con CSP frame-src
- *   (securitypolicyviolation: Framing '')
- *
- * Lo que sí funciona: navegar el propio iframe a una URL HTTPS real del PDF
- * (Content-Disposition: attachment) o copiar el enlace para abrirlo fuera.
+ * Helpers para abrir PDFs desde el portal (incluido embed de Notion).
+ * Preferimos URL HTTPS real + window.open('_blank') para saltar el iframe.
  */
 
 export function isEmbeddedInFrame(): boolean {
@@ -24,26 +16,18 @@ export function toAbsoluteUrl(path: string): string {
   return new URL(path, window.location.origin).href;
 }
 
-export type EmbedOpenResult = "navigated_frame" | "opened_tab";
-
 /**
- * Abre el PDF sin intentar romper el iframe de Notion (evita CSP).
- * Embebido: navega el frame actual. Fuera: intenta pestaña nueva.
+ * Abre la URL del PDF en una pestaña nueva.
+ * Debe llamarse en el mismo tick del click del usuario (gesto) para evitar bloqueo de popups.
  */
-export function openPdfOutsideSandbox(pathOrUrl: string): EmbedOpenResult {
+export function openPdfInNewTab(pathOrUrl: string): boolean {
   const href = toAbsoluteUrl(pathOrUrl);
-
-  if (!isEmbeddedInFrame()) {
-    try {
-      const opened = window.open(href, "_blank", "noopener,noreferrer");
-      if (opened) return "opened_tab";
-    } catch {
-      // continuar
-    }
+  try {
+    const opened = window.open(href, "_blank", "noopener,noreferrer");
+    return Boolean(opened);
+  } catch {
+    return false;
   }
-
-  window.location.assign(href);
-  return "navigated_frame";
 }
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {

@@ -5,7 +5,7 @@ import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructura
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
 import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
-import { isEmbeddedInFrame } from "@/lib/embed-download";
+import { isEmbeddedInFrame, openPdfInNewTab, toAbsoluteUrl } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
@@ -155,8 +155,6 @@ export default function ProformasPage() {
     horas > 0 &&
     cuadre === "ok";
 
-  const generatingPdf = pdfStatus === "loading";
-
   const previewDatos = useMemo(
     () => ({
       codigoProyecto: numeroProyecto,
@@ -230,60 +228,52 @@ export default function ProformasPage() {
     }
   }
 
-  async function handleGenerarPdf() {
-    if (!canGenerarPdf || generatingPdf) return;
+  const pdfGetUrl = useMemo(() => {
+    if (!canGenerarPdf) return "";
+    const actividadesPayload = actividades
+      .filter((a) => a.actividad.trim() || a.descripcion.trim())
+      .map(({ actividad, descripcion: desc, horas: h }) => ({
+        actividad: actividad.trim(),
+        descripcion: desc.trim(),
+        horas: h,
+      }));
+
+    const q = new URLSearchParams({
+      codigoProyecto: numeroProyecto,
+      codigoEstimacion: numeroEstimacion,
+      descripcion: descripcion.trim(),
+      horas: String(horas),
+      perfil,
+      actividades: JSON.stringify(actividadesPayload),
+    });
+    return `/api/proformas/pdf?${q.toString()}`;
+  }, [
+    canGenerarPdf,
+    numeroProyecto,
+    numeroEstimacion,
+    descripcion,
+    horas,
+    perfil,
+    actividades,
+  ]);
+
+  const pdfAbsoluteUrl = pdfGetUrl ? toAbsoluteUrl(pdfGetUrl) : "";
+
+  function handleGenerarPdf() {
+    if (!canGenerarPdf || !pdfGetUrl) return;
     setPdfErrorMsg("");
-    setPdfStatus("loading");
 
-    try {
-      const res = await fetch("/api/proformas/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigoProyecto: numeroProyecto,
-          codigoEstimacion: numeroEstimacion,
-          descripcion: descripcion.trim(),
-          horas,
-          perfil,
-          actividades: actividades
-            .filter((a) => a.actividad.trim() || a.descripcion.trim())
-            .map(({ actividad, descripcion: desc, horas: h }) => ({
-              actividad: actividad.trim(),
-              descripcion: desc.trim(),
-              horas: h,
-            })),
-        }),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        setPdfErrorMsg(err?.error ?? "No se pudo generar el PDF.");
-        setPdfStatus("error");
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-
-      if (embedded) {
-        // blob: no sirve en window.top (cross-origin con Notion). Abrir en el propio frame.
-        window.location.href = url;
-        setPdfStatus("opened_tab");
-        return;
-      }
-
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${codigoProyecto}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+    // Abrir URL GET real en pestaña nueva (salta el iframe de Notion).
+    const opened = openPdfInNewTab(pdfGetUrl);
+    if (opened) {
       setPdfStatus("opened_tab");
-    } catch {
-      setPdfErrorMsg("Error de red al generar el PDF.");
-      setPdfStatus("error");
+      return;
     }
+
+    setPdfErrorMsg(
+      "El navegador bloqueó la pestaña nueva. Usa el enlace de abajo o permite ventanas emergentes."
+    );
+    setPdfStatus("error");
   }
 
   return (
@@ -559,40 +549,59 @@ export default function ProformasPage() {
             <button
               type="button"
               onClick={handleGenerarPdf}
-              disabled={!canGenerarPdf || generatingPdf || structuring}
+              disabled={!canGenerarPdf || structuring}
               className={
                 "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition " +
                 "bg-[#1d2856] text-white hover:bg-[#152040] " +
                 "disabled:cursor-not-allowed disabled:opacity-60"
               }
             >
-              {generatingPdf ? (
-                <>
-                  <Spinner />
-                  Generando PDF…
-                </>
-              ) : (
-                "Generar PDF"
-              )}
+              Generar PDF
             </button>
 
             {pdfStatus === "opened_tab" ? (
               <p className="mt-3 text-xs text-[#787774]">
-                {embedded
-                  ? "Abriendo el PDF fuera del embed de Notion. Luego puedes volver a esta página."
-                  : "PDF generado. Si no se descargó, revisa los permisos del navegador o bloqueadores de ventanas."}
+                Se abrió una pestaña nueva con el PDF. La primera vez puede tardar hasta 1 minuto.
+                {pdfAbsoluteUrl ? (
+                  <>
+                    {" "}
+                    Si no se abrió,{" "}
+                    <a
+                      href={pdfAbsoluteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[#2383e2] underline"
+                    >
+                      ábrelo aquí
+                    </a>
+                    .
+                  </>
+                ) : null}
               </p>
             ) : null}
 
             {pdfStatus === "error" && pdfErrorMsg ? (
               <p className="mt-3 rounded-md border border-[#f5d0d0] bg-[#fdf2f2] px-3 py-2 text-xs text-[#c4554d]" role="alert">
                 {pdfErrorMsg}
+                {pdfAbsoluteUrl ? (
+                  <>
+                    {" "}
+                    <a
+                      href={pdfAbsoluteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium underline"
+                    >
+                      Abrir PDF
+                    </a>
+                  </>
+                ) : null}
               </p>
             ) : null}
 
             {embedded ? (
               <p className="mt-2 text-center text-xs text-[#9b9a97]">
-                Dentro de Notion la descarga sale del embed para evitar el bloqueo del sandbox.
+                Dentro de Notion el PDF se abre en una pestaña nueva del navegador.
               </p>
             ) : null}
           </section>

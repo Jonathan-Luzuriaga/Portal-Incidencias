@@ -156,7 +156,16 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-/** Compatibilidad con enlaces GET simples (sin actividades). */
+function parseActividadesFromQuery(raw: string | null): unknown {
+  if (!raw?.trim()) return [];
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return [];
+  }
+}
+
+/** GET con query params: permite abrir el PDF en pestaña nueva (p. ej. desde Notion). */
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
 
@@ -166,6 +175,7 @@ export async function GET(request: Request): Promise<Response> {
     descripcion: searchParams.get("descripcion") ?? "",
     horas: searchParams.get("horas") ?? "",
     perfil: searchParams.get("perfil") ?? "",
+    actividades: parseActividadesFromQuery(searchParams.get("actividades")),
   });
 
   if (!validated.ok) {

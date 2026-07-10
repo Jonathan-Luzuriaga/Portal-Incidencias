@@ -7,13 +7,12 @@ import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
 import {
   copyTextToClipboard,
   isEmbeddedInFrame,
+  openPdfInNewTab,
   toAbsoluteUrl,
 } from "@/lib/embed-download";
 import { PROPUESTA_STANDARD_GUIDE } from "@/lib/propuesta-pdf/propuesta-standardize";
 
-type Status = "idle" | "loading" | "error";
-
-const DOWNLOAD_TIMEOUT_MS = 130_000;
+type Status = "idle" | "error";
 
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
@@ -26,80 +25,8 @@ const fieldClasses =
 const primaryBtnClasses =
   "inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70";
 
-function Spinner() {
-  return (
-    <svg className="h-4 w-4 animate-spin text-current" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  );
-}
-
 function buildPdfUrl(pageId: string): string {
   return `/api/propuestas/pdf?pageId=${encodeURIComponent(pageId)}`;
-}
-
-function parseFilenameFromDisposition(header: string): string {
-  const utf8Match = header.match(/filename\*=UTF-8''([^;\s]+)/i)?.[1];
-  if (utf8Match) {
-    try {
-      return decodeURIComponent(utf8Match);
-    } catch {
-      // continuar
-    }
-  }
-  return header.match(/filename="([^"]+)"/)?.[1] ?? "Propuesta.pdf";
-}
-
-function triggerBlobDownload(blob: Blob, filename: string): void {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-}
-
-async function downloadViaFetch(url: string): Promise<void> {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    window.clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      let message = `Error ${res.status}`;
-      try {
-        const data = (await res.json()) as { error?: string };
-        if (data.error) message = data.error;
-      } catch {
-        // respuesta no JSON
-      }
-      throw new Error(message);
-    }
-
-    const contentType = res.headers.get("Content-Type") ?? "";
-    if (!contentType.includes("application/pdf")) {
-      throw new Error("La respuesta no fue un PDF. Intenta de nuevo.");
-    }
-
-    const blob = await res.blob();
-    if (blob.size === 0) {
-      throw new Error("El PDF llegó vacío. Intenta de nuevo.");
-    }
-
-    const filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition") ?? "");
-    triggerBlobDownload(blob, filename);
-  } catch (err) {
-    window.clearTimeout(timeoutId);
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("La generación tardó demasiado. Intenta de nuevo.");
-    }
-    throw err;
-  }
 }
 
 function StandardGuidePanel() {
@@ -144,7 +71,6 @@ export default function ProposalPdfGenerator() {
   const [embedded, setEmbedded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const generating = status === "loading";
   const pdfAbsoluteUrl = selected ? toAbsoluteUrl(buildPdfUrl(selected)) : "";
   const canDownload = Boolean(selected) && propuestas.length > 0 && !loadingList;
 
@@ -177,19 +103,20 @@ export default function ProposalPdfGenerator() {
   }, []);
 
   function handleDownload() {
-    if (!selected || generating || !canDownload || embedded) return;
+    if (!selected || !canDownload) return;
     setErrorMsg("");
     setCopied(false);
-    setStatus("loading");
-    void (async () => {
-      try {
-        await downloadViaFetch(buildPdfUrl(selected));
-        setStatus("idle");
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "No se pudo generar el PDF. Intenta de nuevo.");
-        setStatus("error");
-      }
-    })();
+
+    const opened = openPdfInNewTab(buildPdfUrl(selected));
+    if (opened) {
+      setStatus("idle");
+      return;
+    }
+
+    setErrorMsg(
+      "El navegador bloqueó la pestaña nueva. Usa “Copiar enlace” o permite ventanas emergentes."
+    );
+    setStatus("error");
   }
 
   async function handleCopyLink() {
@@ -223,7 +150,6 @@ export default function ProposalPdfGenerator() {
           <select
             id="propuesta-select"
             value={selected}
-            disabled={generating}
             onChange={(e) => {
               setSelected(e.target.value);
               setStatus("idle");
@@ -246,18 +172,11 @@ export default function ProposalPdfGenerator() {
         </p>
       </div>
 
-      {generating && (
-        <p className="text-sm text-[#787774]">
-          Normalizando contenido y generando PDF… puede tardar hasta 1 minuto la primera vez.
-        </p>
-      )}
-
       {embedded && canDownload ? (
-        <div className="space-y-2 rounded-md border border-[#f5e6b3] bg-[#fffbeb] px-3 py-2 text-sm text-[#37352f]">
+        <div className="space-y-2 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
           <p>
-            Notion bloquea descargas, popups y salir del iframe (CSP). Usa{" "}
-            <strong>Descargar PDF</strong> para abrir el archivo en este panel, o copia el enlace y
-            ábrelo en una pestaña nueva del navegador.
+            El PDF se abre en una <strong>pestaña nueva</strong>. Si el navegador la bloquea, copia el
+            enlace y ábrelo manualmente.
           </p>
           <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
             {pdfAbsoluteUrl}
@@ -278,21 +197,14 @@ export default function ProposalPdfGenerator() {
         </div>
       )}
 
-      {embedded && canDownload && pdfAbsoluteUrl ? (
-        <a href={pdfAbsoluteUrl} className={primaryBtnClasses}>
-          Descargar PDF
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={generating || !canDownload}
-          className={primaryBtnClasses}
-        >
-          {generating && <Spinner />}
-          {generating ? "Generando PDF…" : "Descargar PDF"}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={!canDownload}
+        className={primaryBtnClasses}
+      >
+        Descargar PDF
+      </button>
     </div>
   );
 }
