@@ -1,8 +1,14 @@
 /**
  * Helpers para descargas PDF dentro del embed de Notion.
- * Notion embebe la app en un iframe con sandbox restrictivo (sin allow-downloads /
- * allow-popups). Las descargas por blob o window.open desde el iframe fallan.
- * La solución es navegar la ventana superior (top) a la URL real del PDF.
+ *
+ * Notion embebe la app en un iframe con sandbox + CSP propios.
+ * - blob: / <a download> → bloqueados (sin allow-downloads)
+ * - window.open / target=_blank → suelen bloquearse (sin allow-popups)
+ * - window.top.location / target=_top → Notion lo bloquea con CSP frame-src
+ *   (securitypolicyviolation: Framing '')
+ *
+ * Lo que sí funciona: navegar el propio iframe a una URL HTTPS real del PDF
+ * (Content-Disposition: attachment) o copiar el enlace para abrirlo fuera.
  */
 
 export function isEmbeddedInFrame(): boolean {
@@ -18,29 +24,50 @@ export function toAbsoluteUrl(path: string): string {
   return new URL(path, window.location.origin).href;
 }
 
+export type EmbedOpenResult = "navigated_frame" | "opened_tab";
+
 /**
- * Abre una URL de PDF fuera del sandbox del iframe.
- * Preferencia: window.top (rompe el embed) → window.open → location del frame.
+ * Abre el PDF sin intentar romper el iframe de Notion (evita CSP).
+ * Embebido: navega el frame actual. Fuera: intenta pestaña nueva.
  */
-export function openPdfOutsideSandbox(pathOrUrl: string): void {
+export function openPdfOutsideSandbox(pathOrUrl: string): EmbedOpenResult {
   const href = toAbsoluteUrl(pathOrUrl);
 
+  if (!isEmbeddedInFrame()) {
+    try {
+      const opened = window.open(href, "_blank", "noopener,noreferrer");
+      if (opened) return "opened_tab";
+    } catch {
+      // continuar
+    }
+  }
+
+  window.location.assign(href);
+  return "navigated_frame";
+}
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
-    if (window.top && window.top !== window.self) {
-      window.top.location.href = href;
-      return;
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
     }
   } catch {
-    // top cross-origin: Notion suele permitir asignar location.href de todas formas;
-    // si falla, seguimos con fallbacks.
+    // fallback abajo
   }
 
   try {
-    const opened = window.open(href, "_blank", "noopener,noreferrer");
-    if (opened) return;
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    el.remove();
+    return ok;
   } catch {
-    // popup bloqueado
+    return false;
   }
-
-  window.location.href = href;
 }

@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PropuestaListResponse } from "@/app/api/propuestas/lista/route";
 import {
+  copyTextToClipboard,
   isEmbeddedInFrame,
-  openPdfOutsideSandbox,
   toAbsoluteUrl,
 } from "@/lib/embed-download";
 import type { PropuestaListItem } from "@/lib/notion-propuesta-list";
@@ -98,6 +98,7 @@ export default function ProposalWorkflowPdfGenerator() {
   const [errorMsg, setErrorMsg] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
   const [embedded, setEmbedded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
   const resizePreviewFrame = useCallback(() => {
@@ -177,15 +178,9 @@ export default function ProposalWorkflowPdfGenerator() {
   }, [selected, loadingList, loadPreview]);
 
   async function handleDownload() {
-    if (!selected || busy) return;
+    if (!selected || busy || embedded) return;
     setErrorMsg("");
-
-    // Dentro de Notion: salir del sandbox navegando la ventana superior a la URL real.
-    if (embedded) {
-      openPdfOutsideSandbox(buildDownloadUrl(selected));
-      return;
-    }
-
+    setCopied(false);
     setStatus("loading_pdf");
     try {
       const res = await fetchWithTimeout(buildDownloadUrl(selected));
@@ -208,6 +203,16 @@ export default function ProposalWorkflowPdfGenerator() {
       setStatus(previewHtml ? "preview_ready" : "idle");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "No se pudo descargar el PDF.");
+      setStatus("error");
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!selected) return;
+    const ok = await copyTextToClipboard(toAbsoluteUrl(buildDownloadUrl(selected)));
+    setCopied(ok);
+    if (!ok) {
+      setErrorMsg("No se pudo copiar. Selecciona y copia el enlace manualmente.");
       setStatus("error");
     }
   }
@@ -274,9 +279,22 @@ export default function ProposalWorkflowPdfGenerator() {
         )}
 
         {embedded && selected ? (
-          <div className="mt-3 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-            Estás dentro de Notion. Al descargar se abrirá el PDF fuera del embed (puede tardar hasta 1
-            minuto). Luego puedes volver a esta página en Notion.
+          <div className="mt-3 space-y-2 rounded-md border border-[#f5e6b3] bg-[#fffbeb] px-3 py-2 text-sm text-[#37352f]">
+            <p>
+              Notion bloquea descargas, popups y salir del iframe (CSP). Usa{" "}
+              <strong>Descargar PDF</strong> para abrir el archivo en este panel, o copia el enlace y
+              ábrelo en una pestaña nueva.
+            </p>
+            <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
+              {toAbsoluteUrl(buildDownloadUrl(selected))}
+            </p>
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
+            >
+              {copied ? "Enlace copiado" : "Copiar enlace del PDF"}
+            </button>
           </div>
         ) : null}
 
@@ -290,31 +308,25 @@ export default function ProposalWorkflowPdfGenerator() {
             {status === "loading_preview" && <Spinner />}
             Actualizar vista previa
           </button>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={busy || !selected || propuestas.length === 0}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {status === "loading_pdf" && <Spinner />}
-            {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
-          </button>
-        </div>
-
-        {embedded && selected ? (
-          <p className="mt-2 text-center text-xs text-[#787774]">
-            Si no descarga,{" "}
+          {embedded && selected ? (
             <a
               href={toAbsoluteUrl(buildDownloadUrl(selected))}
-              target="_top"
-              rel="noopener noreferrer"
-              className="font-medium text-[#2383e2] underline"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1]"
             >
-              ábrelo aquí
+              Descargar PDF
             </a>
-            .
-          </p>
-        ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={busy || !selected || propuestas.length === 0}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {status === "loading_pdf" && <Spinner />}
+              {status === "loading_pdf" ? "Generando PDF…" : "Descargar PDF"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-lg border border-[#efefef] bg-white p-4">
