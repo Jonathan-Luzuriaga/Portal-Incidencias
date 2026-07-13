@@ -6,10 +6,10 @@ import { ProformaActividadesTable } from "@/components/proformas/ProformaActivid
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
 import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
 import {
-  copyTextToClipboard,
+  fetchPdfAsBlob,
   isEmbeddedInFrame,
-  openPdfFromPost,
   toAbsoluteUrl,
+  triggerBlobDownload,
 } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
@@ -22,7 +22,7 @@ import {
   type ProformaActividad,
 } from "@/lib/proforma-types";
 
-type PdfStatus = "idle" | "loading" | "opened_tab" | "error";
+type PdfStatus = "idle" | "loading" | "ready" | "error";
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
@@ -131,7 +131,8 @@ export default function ProformasPage() {
   const [pdfStatus, setPdfStatus] = useState<PdfStatus>("idle");
   const [pdfErrorMsg, setPdfErrorMsg] = useState("");
   const [embedded, setEmbedded] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState("");
+  const [pdfFilename, setPdfFilename] = useState("");
   const [iaAviso, setIaAviso] = useState("");
 
   const [numeroProyecto, setNumeroProyecto] = useState("");
@@ -176,6 +177,27 @@ export default function ProformasPage() {
   useEffect(() => {
     setEmbedded(isEmbeddedInFrame());
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+    };
+  }, [pdfObjectUrl]);
+
+  function clearReadyPdf() {
+    setPdfObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+    setPdfFilename("");
+  }
+
+  // Si cambian los datos, el PDF listo deja de ser válido.
+  useEffect(() => {
+    clearReadyPdf();
+    setPdfStatus((prev) => (prev === "ready" ? "idle" : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo invalidar al editar el formulario
+  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades]);
 
   function handleNumActividadesChange(value: number) {
     const n = Number.isFinite(value) ? Math.max(0, Math.min(12, Math.round(value))) : 0;
@@ -265,21 +287,11 @@ export default function ProformasPage() {
 
   const pdfAbsoluteUrl = pdfGetUrl ? toAbsoluteUrl(pdfGetUrl) : "";
 
-  async function handleCopyPdfLink() {
-    if (!pdfAbsoluteUrl) return;
-    const ok = await copyTextToClipboard(pdfAbsoluteUrl);
-    setCopied(ok);
-    if (!ok) {
-      setPdfErrorMsg("No se pudo copiar. Selecciona y copia el enlace manualmente.");
-      setPdfStatus("error");
-    }
-  }
-
   async function handleGenerarPdf() {
     if (!canGenerarPdf) return;
     setPdfErrorMsg("");
-    setCopied(false);
     setPdfStatus("loading");
+    clearReadyPdf();
 
     const actividadesPayload = actividades
       .filter((a) => a.actividad.trim() || a.descripcion.trim())
@@ -289,8 +301,7 @@ export default function ProformasPage() {
         horas: h,
       }));
 
-    // about:blank en el mismo gesto del click; POST evita URLs GET largas (actividades).
-    const result = await openPdfFromPost("/api/proformas/pdf", {
+    const result = await fetchPdfAsBlob("/api/proformas/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -303,19 +314,20 @@ export default function ProformasPage() {
       }),
     });
 
-    if (result.ok) {
-      setPdfStatus("opened_tab");
+    if (!result.ok) {
+      setPdfErrorMsg(result.message);
+      setPdfStatus("error");
       return;
     }
 
-    if (result.reason === "popup_blocked") {
-      setPdfErrorMsg(
-        "El navegador bloqueó la pestaña nueva. Usa el enlace de abajo o permite ventanas emergentes."
-      );
-    } else {
-      setPdfErrorMsg(result.message ?? "No se pudo generar el PDF.");
-    }
-    setPdfStatus("error");
+    const filename = `${codigoProyecto || "proforma"}.pdf`;
+    const objectUrl = URL.createObjectURL(result.blob);
+    setPdfObjectUrl(objectUrl);
+    setPdfFilename(filename);
+    setPdfStatus("ready");
+
+    // Intento automático (falla a menudo en Notion tras el await; el botón <a> es el plan fiable).
+    triggerBlobDownload(objectUrl, filename);
   }
 
   return (
@@ -588,33 +600,11 @@ export default function ProformasPage() {
               </p>
             ) : null}
 
-            {embedded && canGenerarPdf ? (
-              <div className="mt-4 space-y-2 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
-                <p>
-                  El PDF se abre en una <strong>pestaña nueva</strong>. Si el navegador la bloquea, copia el
-                  enlace y ábrelo manualmente.
-                </p>
-                <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
-                  {pdfAbsoluteUrl}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    href={pdfAbsoluteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#2383e2] transition hover:bg-[#f7f7f5]"
-                  >
-                    Abrir enlace del PDF
-                  </a>
-                  <button
-                    type="button"
-                    onClick={handleCopyPdfLink}
-                    className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
-                  >
-                    {copied ? "Enlace copiado" : "Copiar enlace del PDF"}
-                  </button>
-                </div>
-              </div>
+            {embedded ? (
+              <p className="mt-4 text-xs text-[#787774]">
+                En Notion la descarga ocurre en esta misma ventana (sin pestaña nueva). Genera el PDF y
+                pulsa <strong>Descargar archivo</strong> si no empieza sola.
+              </p>
             ) : null}
 
             <button
@@ -637,25 +627,28 @@ export default function ProformasPage() {
               )}
             </button>
 
-            {pdfStatus === "opened_tab" ? (
-              <p className="mt-3 text-xs text-[#787774]">
-                Se abrió una pestaña nueva con el PDF. La primera vez puede tardar hasta 1 minuto.
-                {pdfAbsoluteUrl ? (
-                  <>
-                    {" "}
-                    Si no se abrió,{" "}
-                    <a
-                      href={pdfAbsoluteUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-[#2383e2] underline"
-                    >
-                      ábrelo aquí
-                    </a>
-                    .
-                  </>
-                ) : null}
-              </p>
+            {pdfStatus === "ready" && pdfObjectUrl ? (
+              <div className="mt-3 space-y-3 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-3">
+                <p className="text-sm text-[#37352f]">
+                  PDF listo{pdfFilename ? ` (${pdfFilename})` : ""}. Si no se descargó automáticamente,
+                  pulsa el botón (sin salir de Notion):
+                </p>
+                <a
+                  href={pdfObjectUrl}
+                  download={pdfFilename || "proforma.pdf"}
+                  className={
+                    "inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition " +
+                    "bg-[#2383e2] text-white hover:bg-[#1a73d1]"
+                  }
+                >
+                  Descargar {pdfFilename || "PDF"}
+                </a>
+                <iframe
+                  title="PDF generado"
+                  src={pdfObjectUrl}
+                  className="h-[420px] w-full rounded-md border border-[#e3e2e0] bg-white"
+                />
+              </div>
             ) : null}
 
             {pdfStatus === "error" && pdfErrorMsg ? (
@@ -664,14 +657,16 @@ export default function ProformasPage() {
                 {pdfAbsoluteUrl ? (
                   <>
                     {" "}
+                    Como último recurso,{" "}
                     <a
                       href={pdfAbsoluteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium underline"
                     >
-                      Abrir PDF
+                      abre el enlace del PDF
                     </a>
+                    .
                   </>
                 ) : null}
               </p>
