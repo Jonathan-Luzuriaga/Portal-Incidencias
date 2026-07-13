@@ -5,7 +5,12 @@ import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructura
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
 import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
-import { isEmbeddedInFrame, openPdfInNewTab, toAbsoluteUrl } from "@/lib/embed-download";
+import {
+  copyTextToClipboard,
+  isEmbeddedInFrame,
+  openPdfFromPost,
+  toAbsoluteUrl,
+} from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
@@ -126,6 +131,7 @@ export default function ProformasPage() {
   const [pdfStatus, setPdfStatus] = useState<PdfStatus>("idle");
   const [pdfErrorMsg, setPdfErrorMsg] = useState("");
   const [embedded, setEmbedded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [iaAviso, setIaAviso] = useState("");
 
   const [numeroProyecto, setNumeroProyecto] = useState("");
@@ -259,20 +265,56 @@ export default function ProformasPage() {
 
   const pdfAbsoluteUrl = pdfGetUrl ? toAbsoluteUrl(pdfGetUrl) : "";
 
-  function handleGenerarPdf() {
-    if (!canGenerarPdf || !pdfGetUrl) return;
-    setPdfErrorMsg("");
+  async function handleCopyPdfLink() {
+    if (!pdfAbsoluteUrl) return;
+    const ok = await copyTextToClipboard(pdfAbsoluteUrl);
+    setCopied(ok);
+    if (!ok) {
+      setPdfErrorMsg("No se pudo copiar. Selecciona y copia el enlace manualmente.");
+      setPdfStatus("error");
+    }
+  }
 
-    // Abrir URL GET real en pestaña nueva (salta el iframe de Notion).
-    const opened = openPdfInNewTab(pdfGetUrl);
-    if (opened) {
+  async function handleGenerarPdf() {
+    if (!canGenerarPdf) return;
+    setPdfErrorMsg("");
+    setCopied(false);
+    setPdfStatus("loading");
+
+    const actividadesPayload = actividades
+      .filter((a) => a.actividad.trim() || a.descripcion.trim())
+      .map(({ actividad, descripcion: desc, horas: h }) => ({
+        actividad: actividad.trim(),
+        descripcion: desc.trim(),
+        horas: h,
+      }));
+
+    // about:blank en el mismo gesto del click; POST evita URLs GET largas (actividades).
+    const result = await openPdfFromPost("/api/proformas/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigoProyecto: numeroProyecto,
+        codigoEstimacion: numeroEstimacion,
+        descripcion: descripcion.trim(),
+        horas,
+        perfil,
+        actividades: actividadesPayload,
+      }),
+    });
+
+    if (result.ok) {
       setPdfStatus("opened_tab");
       return;
     }
 
-    setPdfErrorMsg(
-      "El navegador bloqueó la pestaña nueva. Usa el enlace de abajo o permite ventanas emergentes."
-    );
+    if (result.reason === "popup_blocked") {
+      setPdfErrorMsg(
+        "El navegador bloqueó la pestaña nueva. Usa el enlace de abajo o permite ventanas emergentes."
+      );
+    } else {
+      setPdfErrorMsg(result.message ?? "No se pudo generar el PDF.");
+    }
     setPdfStatus("error");
   }
 
@@ -546,17 +588,53 @@ export default function ProformasPage() {
               </p>
             ) : null}
 
+            {embedded && canGenerarPdf ? (
+              <div className="mt-4 space-y-2 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-2 text-sm text-[#37352f]">
+                <p>
+                  El PDF se abre en una <strong>pestaña nueva</strong>. Si el navegador la bloquea, copia el
+                  enlace y ábrelo manualmente.
+                </p>
+                <p className="break-all rounded border border-[#efefef] bg-white px-2 py-1.5 font-mono text-xs text-[#787774]">
+                  {pdfAbsoluteUrl}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={pdfAbsoluteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#2383e2] transition hover:bg-[#f7f7f5]"
+                  >
+                    Abrir enlace del PDF
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyPdfLink}
+                    className="rounded-md border border-[#e3e2e0] bg-white px-3 py-1.5 text-xs font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
+                  >
+                    {copied ? "Enlace copiado" : "Copiar enlace del PDF"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <button
               type="button"
-              onClick={handleGenerarPdf}
-              disabled={!canGenerarPdf || structuring}
+              onClick={() => void handleGenerarPdf()}
+              disabled={!canGenerarPdf || structuring || pdfStatus === "loading"}
               className={
                 "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition " +
                 "bg-[#1d2856] text-white hover:bg-[#152040] " +
                 "disabled:cursor-not-allowed disabled:opacity-60"
               }
             >
-              Generar PDF
+              {pdfStatus === "loading" ? (
+                <>
+                  <Spinner />
+                  Generando PDF…
+                </>
+              ) : (
+                "Generar PDF"
+              )}
             </button>
 
             {pdfStatus === "opened_tab" ? (
@@ -596,12 +674,6 @@ export default function ProformasPage() {
                     </a>
                   </>
                 ) : null}
-              </p>
-            ) : null}
-
-            {embedded ? (
-              <p className="mt-2 text-center text-xs text-[#9b9a97]">
-                Dentro de Notion el PDF se abre en una pestaña nueva del navegador.
               </p>
             ) : null}
           </section>
