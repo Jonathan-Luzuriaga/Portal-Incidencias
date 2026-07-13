@@ -40,7 +40,8 @@ export async function uploadBufferToNotion(
 
   try {
     const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-    const blob = new Blob([buffer], { type: contentType });
+    const bytes = new Uint8Array(buffer);
+    const blob = new Blob([bytes], { type: contentType });
     const sent = await notion.fileUploads.send({
       file_upload_id: upload.id,
       file: { filename: safeName, data: blob },
