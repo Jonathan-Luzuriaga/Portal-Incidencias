@@ -5,6 +5,7 @@ import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructura
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
 import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
+import type { ProformaOpcionesResponse } from "@/app/api/proformas/opciones/route";
 import type { ProformaPublishResponse } from "@/app/api/proformas/pdf/publish/route";
 import { isEmbeddedInFrame } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
@@ -136,6 +137,10 @@ export default function ProformasPage() {
   const [descripcion, setDescripcion] = useState("");
   const [horas, setHoras] = useState<number>(0);
   const [perfil, setPerfil] = useState<PerfilDesarrollador>("SEMI_SENIOR");
+  const [cliente, setCliente] = useState("");
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [clientsError, setClientsError] = useState("");
   const [actividades, setActividades] = useState<ProformaActividad[]>([]);
 
   const codigoProyecto = formatCodigoProyecto(numeroProyecto);
@@ -155,6 +160,7 @@ export default function ProformasPage() {
     codigoProyecto.length > 0 &&
     codigoEstimacion.length > 0 &&
     descripcion.trim().length > 0 &&
+    cliente.trim().length > 0 &&
     horas > 0 &&
     cuadre === "ok";
 
@@ -174,12 +180,40 @@ export default function ProformasPage() {
     setEmbedded(isEmbeddedInFrame());
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoadingClients(true);
+      setClientsError("");
+      try {
+        const res = await fetch("/api/proformas/opciones");
+        const data = (await res.json()) as ProformaOpcionesResponse;
+        if (!active) return;
+        if (!res.ok || !data.ok) {
+          setClientsError(data.ok ? `Error ${res.status}` : data.error);
+          return;
+        }
+        setClientOptions(data.clients);
+        if (data.clients.length === 1) {
+          setCliente(data.clients[0]);
+        }
+      } catch {
+        if (active) setClientsError("No se pudieron cargar los clientes de Notion.");
+      } finally {
+        if (active) setLoadingClients(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Si cambian los datos, el enlace publicado deja de ser válido.
   useEffect(() => {
     setNotionPageUrl("");
     setPdfFilename("");
     setPdfStatus((prev) => (prev === "published" ? "idle" : prev));
-  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades]);
+  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades, cliente]);
 
   function handleNumActividadesChange(value: number) {
     const n = Number.isFinite(value) ? Math.max(0, Math.min(12, Math.round(value))) : 0;
@@ -263,6 +297,7 @@ export default function ProformasPage() {
           descripcion: descripcion.trim(),
           horas,
           perfil,
+          cliente: cliente.trim(),
           actividades: actividadesPayload,
         }),
       });
@@ -409,6 +444,36 @@ export default function ProformasPage() {
                   preview={codigoEstimacion || undefined}
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="cliente" className={labelClasses}>
+                Cliente
+                <RequiredMark />
+              </label>
+              {loadingClients ? (
+                <p className="text-sm text-[#9b9a97]">Cargando clientes desde Notion…</p>
+              ) : clientsError ? (
+                <p className="text-sm text-[#b5403a]">{clientsError}</p>
+              ) : (
+                <select
+                  id="cliente"
+                  value={cliente}
+                  onChange={(e) => setCliente(e.target.value)}
+                  className={fieldClasses}
+                  disabled={clientOptions.length === 0}
+                >
+                  <option value="">Selecciona un cliente</option>
+                  {clientOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="mt-1.5 text-xs text-[#9b9a97]">
+                Opciones tomadas de la columna Cliente en Notion.
+              </p>
             </div>
 
             <div>

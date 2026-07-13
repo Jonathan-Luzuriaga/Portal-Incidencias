@@ -5,6 +5,7 @@ export const TEAM_PROJECT_NAMES = [
   "Bago",
   "Plasticaucho",
   "Propuestas",
+  "Proformas",
   "Gestión Externa",
   "Gestión Interna",
   "CRM",
