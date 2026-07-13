@@ -161,7 +161,8 @@ Base de datos compartida por ambos portales. Nombres de columna **exactos** (con
 | `NOTION_PROP_TAGS` | `Etiquetas` | multi_select |
 | `NOTION_PROP_SPRINT` | `Sprint` | relation |
 
-Sprint: auto-detecta el sprint “Actual” (`lib/notion-sprint.ts`).  
+Sprint: auto-detecta el sprint “Actual” desde `NOTION_SPRINT_DATABASE_ID` (`lib/notion-sprint.ts`).  
+`NOTION_SPRINT_RELATION_ID` solo se usa como fallback si la detección falla.  
 Fechas del día: `Fecha límite`, `Fecha Inicio Real` (`lib/dates.ts`).
 
 ### Etiquetas automáticas (solo portal cliente)
