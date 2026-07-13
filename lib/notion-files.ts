@@ -4,6 +4,65 @@ import { ServiceError } from "./types";
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // Límite Notion single-part upload.
 
 /**
+ * Sube un Buffer/Uint8Array a Notion (PDF generado en servidor, etc.).
+ * Devuelve el file_upload.id para adjuntarlo a bloques image/file.
+ */
+export async function uploadBufferToNotion(
+  data: Buffer | Uint8Array,
+  filename: string,
+  contentType = "application/octet-stream"
+): Promise<string> {
+  const size = data.byteLength;
+  if (size > MAX_FILE_BYTES) {
+    throw new ServiceError(
+      `El archivo "${filename}" supera el límite de 20 MB de Notion.`,
+      400
+    );
+  }
+  if (size === 0) {
+    throw new ServiceError(`El archivo "${filename}" está vacío.`, 400);
+  }
+
+  const notion = getNotionClient();
+  const safeName = filename.trim() || "archivo.bin";
+
+  let upload;
+  try {
+    upload = await notion.fileUploads.create({
+      mode: "single_part",
+      filename: safeName,
+      content_type: contentType,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error desconocido";
+    throw new ServiceError(`No se pudo iniciar la subida en Notion: ${msg}`, 502);
+  }
+
+  try {
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const bytes = new Uint8Array(buffer);
+    const blob = new Blob([bytes], { type: contentType });
+    const sent = await notion.fileUploads.send({
+      file_upload_id: upload.id,
+      file: { filename: safeName, data: blob },
+    });
+
+    if (sent.status !== "uploaded") {
+      throw new ServiceError(
+        `Notion no completó la subida de "${safeName}" (estado: ${sent.status}).`,
+        502
+      );
+    }
+
+    return upload.id;
+  } catch (err) {
+    if (err instanceof ServiceError) throw err;
+    const msg = err instanceof Error ? err.message : "Error desconocido";
+    throw new ServiceError(`Error al subir "${safeName}" a Notion: ${msg}`, 502);
+  }
+}
+
+/**
  * Sube un archivo directamente a Notion (imagen, PDF, DOCX, etc.).
  * Devuelve el file_upload.id para adjuntarlo a bloques image/file.
  */
@@ -15,42 +74,9 @@ export async function uploadFileToNotion(file: File): Promise<string> {
     );
   }
 
-  const notion = getNotionClient();
   const contentType = file.type || "application/octet-stream";
-
-  let upload;
-  try {
-    upload = await notion.fileUploads.create({
-      mode: "single_part",
-      filename: file.name,
-      content_type: contentType,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error desconocido";
-    throw new ServiceError(`No se pudo iniciar la subida en Notion: ${msg}`, 502);
-  }
-
-  try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const blob = new Blob([buffer], { type: contentType });
-    const sent = await notion.fileUploads.send({
-      file_upload_id: upload.id,
-      file: { filename: file.name, data: blob },
-    });
-
-    if (sent.status !== "uploaded") {
-      throw new ServiceError(
-        `Notion no completó la subida de "${file.name}" (estado: ${sent.status}).`,
-        502
-      );
-    }
-
-    return upload.id;
-  } catch (err) {
-    if (err instanceof ServiceError) throw err;
-    const msg = err instanceof Error ? err.message : "Error desconocido";
-    throw new ServiceError(`Error al subir "${file.name}" a Notion: ${msg}`, 502);
-  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return uploadBufferToNotion(buffer, file.name, contentType);
 }
 
 /** Sube una imagen directamente a Notion (sin servicios externos). */

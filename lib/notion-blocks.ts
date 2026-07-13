@@ -291,10 +291,13 @@ export function evidenceImageBlocks(fileUploadIds: string[]): BlockObjectRequest
 }
 
 /** Bloques de archivo adjunto (PDF, DOCX, etc.) usando file_upload IDs de Notion. */
-export function documentFileBlocks(fileUploadIds: string[]): BlockObjectRequest[] {
+export function documentFileBlocks(
+  fileUploadIds: string[],
+  heading = "Documento original"
+): BlockObjectRequest[] {
   if (fileUploadIds.length === 0) return [];
 
-  const blocks: BlockObjectRequest[] = [headingBlock(3, "Documento original")];
+  const blocks: BlockObjectRequest[] = [headingBlock(3, heading)];
 
   for (const id of fileUploadIds) {
     blocks.push({

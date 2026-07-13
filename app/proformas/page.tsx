@@ -5,12 +5,8 @@ import type { ProformaEstructurarResponse } from "@/app/api/proformas/estructura
 import { ProformaActividadesTable } from "@/components/proformas/ProformaActividadesTable";
 import { ProformaLivePreview } from "@/components/proformas/ProformaLivePreview";
 import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
-import {
-  fetchPdfAsBlob,
-  isEmbeddedInFrame,
-  toAbsoluteUrl,
-  triggerBlobDownload,
-} from "@/lib/embed-download";
+import type { ProformaPublishResponse } from "@/app/api/proformas/pdf/publish/route";
+import { isEmbeddedInFrame } from "@/lib/embed-download";
 import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
@@ -22,7 +18,7 @@ import {
   type ProformaActividad,
 } from "@/lib/proforma-types";
 
-type PdfStatus = "idle" | "loading" | "ready" | "error";
+type PdfStatus = "idle" | "loading" | "published" | "error";
 
 const fieldClasses =
   "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
@@ -131,7 +127,7 @@ export default function ProformasPage() {
   const [pdfStatus, setPdfStatus] = useState<PdfStatus>("idle");
   const [pdfErrorMsg, setPdfErrorMsg] = useState("");
   const [embedded, setEmbedded] = useState(false);
-  const [pdfObjectUrl, setPdfObjectUrl] = useState("");
+  const [notionPageUrl, setNotionPageUrl] = useState("");
   const [pdfFilename, setPdfFilename] = useState("");
   const [iaAviso, setIaAviso] = useState("");
 
@@ -178,25 +174,11 @@ export default function ProformasPage() {
     setEmbedded(isEmbeddedInFrame());
   }, []);
 
+  // Si cambian los datos, el enlace publicado deja de ser válido.
   useEffect(() => {
-    return () => {
-      if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
-    };
-  }, [pdfObjectUrl]);
-
-  function clearReadyPdf() {
-    setPdfObjectUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return "";
-    });
+    setNotionPageUrl("");
     setPdfFilename("");
-  }
-
-  // Si cambian los datos, el PDF listo deja de ser válido.
-  useEffect(() => {
-    clearReadyPdf();
-    setPdfStatus((prev) => (prev === "ready" ? "idle" : prev));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo invalidar al editar el formulario
+    setPdfStatus((prev) => (prev === "published" ? "idle" : prev));
   }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades]);
 
   function handleNumActividadesChange(value: number) {
@@ -256,42 +238,12 @@ export default function ProformasPage() {
     }
   }
 
-  const pdfGetUrl = useMemo(() => {
-    if (!canGenerarPdf) return "";
-    const actividadesPayload = actividades
-      .filter((a) => a.actividad.trim() || a.descripcion.trim())
-      .map(({ actividad, descripcion: desc, horas: h }) => ({
-        actividad: actividad.trim(),
-        descripcion: desc.trim(),
-        horas: h,
-      }));
-
-    const q = new URLSearchParams({
-      codigoProyecto: numeroProyecto,
-      codigoEstimacion: numeroEstimacion,
-      descripcion: descripcion.trim(),
-      horas: String(horas),
-      perfil,
-      actividades: JSON.stringify(actividadesPayload),
-    });
-    return `/api/proformas/pdf?${q.toString()}`;
-  }, [
-    canGenerarPdf,
-    numeroProyecto,
-    numeroEstimacion,
-    descripcion,
-    horas,
-    perfil,
-    actividades,
-  ]);
-
-  const pdfAbsoluteUrl = pdfGetUrl ? toAbsoluteUrl(pdfGetUrl) : "";
-
   async function handleGenerarPdf() {
     if (!canGenerarPdf) return;
     setPdfErrorMsg("");
     setPdfStatus("loading");
-    clearReadyPdf();
+    setNotionPageUrl("");
+    setPdfFilename("");
 
     const actividadesPayload = actividades
       .filter((a) => a.actividad.trim() || a.descripcion.trim())
@@ -301,33 +253,34 @@ export default function ProformasPage() {
         horas: h,
       }));
 
-    const result = await fetchPdfAsBlob("/api/proformas/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        codigoProyecto: numeroProyecto,
-        codigoEstimacion: numeroEstimacion,
-        descripcion: descripcion.trim(),
-        horas,
-        perfil,
-        actividades: actividadesPayload,
-      }),
-    });
+    try {
+      const res = await fetch("/api/proformas/pdf/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigoProyecto: numeroProyecto,
+          codigoEstimacion: numeroEstimacion,
+          descripcion: descripcion.trim(),
+          horas,
+          perfil,
+          actividades: actividadesPayload,
+        }),
+      });
 
-    if (!result.ok) {
-      setPdfErrorMsg(result.message);
+      const data = (await res.json()) as ProformaPublishResponse;
+      if (!res.ok || !data.ok) {
+        setPdfErrorMsg(data.ok ? `Error ${res.status}` : data.error);
+        setPdfStatus("error");
+        return;
+      }
+
+      setNotionPageUrl(data.pageUrl);
+      setPdfFilename(data.filename);
+      setPdfStatus("published");
+    } catch {
+      setPdfErrorMsg("Error de red al publicar la proforma en Notion.");
       setPdfStatus("error");
-      return;
     }
-
-    const filename = `${codigoProyecto || "proforma"}.pdf`;
-    const objectUrl = URL.createObjectURL(result.blob);
-    setPdfObjectUrl(objectUrl);
-    setPdfFilename(filename);
-    setPdfStatus("ready");
-
-    // Intento automático (falla a menudo en Notion tras el await; el botón <a> es el plan fiable).
-    triggerBlobDownload(objectUrl, filename);
   }
 
   return (
@@ -602,8 +555,8 @@ export default function ProformasPage() {
 
             {embedded ? (
               <p className="mt-4 text-xs text-[#787774]">
-                En Notion la descarga ocurre en esta misma ventana (sin pestaña nueva). Genera el PDF y
-                pulsa <strong>Descargar archivo</strong> si no empieza sola.
+                Notion bloquea descargas dentro del embed. El PDF se publica en tu workspace y puedes
+                abrirlo con el botón de abajo.
               </p>
             ) : null}
 
@@ -620,55 +573,46 @@ export default function ProformasPage() {
               {pdfStatus === "loading" ? (
                 <>
                   <Spinner />
-                  Generando PDF…
+                  Publicando en Notion…
                 </>
               ) : (
                 "Generar PDF"
               )}
             </button>
 
-            {pdfStatus === "ready" && pdfObjectUrl ? (
+            {pdfStatus === "published" && notionPageUrl ? (
               <div className="mt-3 space-y-3 rounded-md border border-[#d3e5fd] bg-[#edf3fe] px-3 py-3">
                 <p className="text-sm text-[#37352f]">
-                  PDF listo{pdfFilename ? ` (${pdfFilename})` : ""}. Si no se descargó automáticamente,
-                  pulsa el botón (sin salir de Notion):
+                  PDF publicado en Notion{pdfFilename ? ` (${pdfFilename})` : ""}. Ábrelo fuera del
+                  sandbox del embed para descargarlo.
                 </p>
                 <a
-                  href={pdfObjectUrl}
-                  download={pdfFilename || "proforma.pdf"}
+                  href={notionPageUrl}
+                  target="_top"
+                  rel="noopener noreferrer"
                   className={
                     "inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition " +
                     "bg-[#2383e2] text-white hover:bg-[#1a73d1]"
                   }
                 >
-                  Descargar {pdfFilename || "PDF"}
+                  Abrir PDF en Notion
                 </a>
-                <iframe
-                  title="PDF generado"
-                  src={pdfObjectUrl}
-                  className="h-[420px] w-full rounded-md border border-[#e3e2e0] bg-white"
-                />
+                {!embedded ? (
+                  <a
+                    href={notionPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-center text-xs font-medium text-[#2383e2] underline"
+                  >
+                    Abrir en pestaña nueva
+                  </a>
+                ) : null}
               </div>
             ) : null}
 
             {pdfStatus === "error" && pdfErrorMsg ? (
               <p className="mt-3 rounded-md border border-[#f5d0d0] bg-[#fdf2f2] px-3 py-2 text-xs text-[#c4554d]" role="alert">
                 {pdfErrorMsg}
-                {pdfAbsoluteUrl ? (
-                  <>
-                    {" "}
-                    Como último recurso,{" "}
-                    <a
-                      href={pdfAbsoluteUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium underline"
-                    >
-                      abre el enlace del PDF
-                    </a>
-                    .
-                  </>
-                ) : null}
               </p>
             ) : null}
           </section>

@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/propuestas/pdf": ["./public/propuestas-assets/**"],
     "/api/proformas/pdf": ["./public/propuestas-assets/**"],
+    "/api/proformas/pdf/publish": ["./public/propuestas-assets/**"],
   },
   async headers() {
     return [
