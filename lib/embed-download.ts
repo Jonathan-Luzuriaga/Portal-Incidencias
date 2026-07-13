@@ -1,6 +1,8 @@
 /**
- * Helpers para abrir PDFs desde el portal (incluido embed de Notion).
- * Preferimos pestaña nueva + URL HTTPS / blob para saltar el iframe.
+ * Helpers para abrir/descargar PDFs desde el portal (incluido embed de Notion).
+ *
+ * Notion suele bloquear window.open en el iframe. La vía fiable es:
+ * POST → blob → <a download> (sin pestaña nueva).
  */
 
 export function isEmbeddedInFrame(): boolean {
@@ -30,24 +32,6 @@ export function openPdfInNewTab(pathOrUrl: string): boolean {
   }
 }
 
-export type OpenPdfFromPostResult =
-  | { ok: true }
-  | { ok: false; reason: "popup_blocked" | "request_failed"; message?: string };
-
-function writePopupHtml(popup: Window, title: string, bodyHtml: string): void {
-  try {
-    popup.document.open();
-    popup.document.write(
-      `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/><title>${title}</title>` +
-        `<style>body{font-family:system-ui,sans-serif;padding:2rem;color:#37352f;}</style>` +
-        `</head><body>${bodyHtml}</body></html>`
-    );
-    popup.document.close();
-  } catch {
-    // cross-origin / closed
-  }
-}
-
 async function parseErrorMessage(res: Response): Promise<string> {
   let message = `Error ${res.status}`;
   try {
@@ -59,60 +43,56 @@ async function parseErrorMessage(res: Response): Promise<string> {
   return message;
 }
 
-/**
- * Abre about:blank en el mismo gesto del click, genera el PDF por POST y
- * navega la pestaña al blob (fuera del sandbox de Notion).
- */
-export async function openPdfFromPost(
+export type FetchPdfBlobResult =
+  | { ok: true; blob: Blob }
+  | { ok: false; message: string };
+
+/** Genera el PDF por POST y devuelve el blob (sin abrir pestañas). */
+export async function fetchPdfAsBlob(
   url: string,
   init: RequestInit
-): Promise<OpenPdfFromPostResult> {
-  let popup: Window | null = null;
-  try {
-    popup = window.open("about:blank", "_blank");
-  } catch {
-    popup = null;
-  }
-
-  if (!popup) {
-    return { ok: false, reason: "popup_blocked" };
-  }
-
-  writePopupHtml(popup, "Generando PDF…", "<p>Generando PDF… puede tardar hasta 1 minuto.</p>");
-
+): Promise<FetchPdfBlobResult> {
   try {
     const res = await fetch(toAbsoluteUrl(url), init);
     if (!res.ok) {
-      const message = await parseErrorMessage(res);
-      writePopupHtml(
-        popup,
-        "Error al generar PDF",
-        `<p>No se pudo generar el PDF.</p><p>${message.replace(/</g, "&lt;")}</p>`
-      );
-      return { ok: false, reason: "request_failed", message };
+      return { ok: false, message: await parseErrorMessage(res) };
     }
-
+    const contentType = res.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("application/pdf") && !contentType.includes("octet-stream")) {
+      // Algunos proxies envían PDF sin content-type perfecto; si el body es binario igual sirve.
+      const peek = await res.clone().arrayBuffer();
+      if (peek.byteLength < 5) {
+        return { ok: false, message: "La respuesta del servidor no es un PDF válido." };
+      }
+    }
     const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-      popup.location.href = objectUrl;
-    } catch {
-      writePopupHtml(
-        popup,
-        "PDF listo",
-        `<p>PDF generado.</p><p><a href="${objectUrl}" target="_blank" rel="noopener noreferrer">Abrir PDF</a></p>`
-      );
+    if (blob.size < 5) {
+      return { ok: false, message: "El PDF llegó vacío." };
     }
-    return { ok: true };
+    return {
+      ok: true,
+      blob: blob.type ? blob : new Blob([blob], { type: "application/pdf" }),
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error de red al generar el PDF.";
-    writePopupHtml(
-      popup,
-      "Error al generar PDF",
-      `<p>No se pudo generar el PDF.</p><p>${message.replace(/</g, "&lt;")}</p>`
-    );
-    return { ok: false, reason: "request_failed", message };
+    return { ok: false, message };
   }
+}
+
+/**
+ * Dispara descarga en el propio frame (sin popup).
+ * Tras un await el gesto del usuario ya se perdió: en Notion conviene
+ * mostrar además un <a download> visible para un segundo clic.
+ */
+export function triggerBlobDownload(objectUrl: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {
