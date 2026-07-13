@@ -19,8 +19,10 @@ import {
   notionStatus,
   notionTitle,
 } from "./notion-properties";
-import { resolveCurrentSprintId } from "./notion-sprint";
+import { resolveSprintIdForDate } from "./notion-sprint";
 import { resolveTeamProjectRelationId } from "./team-project-relations";
+import { listNotionProjects } from "./team-notion-meta";
+import { normalizeTeamLabel } from "./team-profiles";
 import { getTeamNotionProps } from "./team-notion-config";
 import { ServiceError } from "./types";
 
@@ -77,6 +79,31 @@ function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnTy
   return lines.join("\n");
 }
 
+async function resolveProformasProjectId(configured: string): Promise<string> {
+  try {
+    return resolveTeamProjectRelationId(configured);
+  } catch {
+    // Sin UUID en env: buscar "Proformas" en la BD / esquema de proyectos.
+  }
+
+  try {
+    const projects = await listNotionProjects();
+    const match = projects.find(
+      (p) => normalizeTeamLabel(p.label) === normalizeTeamLabel("Proformas")
+    );
+    if (match?.relationId) return match.relationId;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error desconocido";
+    console.warn("[notion-proforma] No se pudo listar proyectos:", msg);
+  }
+
+  throw new ServiceError(
+    'No se encontró el proyecto "Proformas" en Notion. ' +
+      "Configura NOTION_PROFORMA_PROJECT_RELATION_ID con el UUID de esa página.",
+    502
+  );
+}
+
 /**
  * Sube el PDF a Notion y crea una tarea en la BD Tareas con el archivo adjunto.
  */
@@ -95,6 +122,7 @@ export async function createProformaPdfPage(
   const cliente = (args.cliente ?? "").trim() || proformaCfg.clientDefault;
 
   const fileUploadId = await uploadBufferToNotion(args.pdf, filename, "application/pdf");
+  const projectId = await resolveProformasProjectId(proformaCfg.projectRelationId);
 
   const title = `Proforma — ${args.codigoProyecto} / ${codigoEstimacion}`;
   const shortDescription = `${args.descripcion.trim().slice(0, 180)}${
@@ -112,7 +140,7 @@ export async function createProformaPdfPage(
     [props.priority]: notionSelect(proformaCfg.prioridadDefault),
     [props.category]: notionMultiSelect(proformaCfg.categoria),
     [props.tags]: notionMultiSelect(proformaCfg.etiquetas),
-    [props.project]: notionRelation([resolveTeamProjectRelationId(proformaCfg.projectRelationId)]),
+    [props.project]: notionRelation([projectId]),
     [props.client]: notionMultiSelect([cliente]),
     [props.ticketType]: notionSelect(proformaCfg.ticketType),
     [props.status]: notionStatus(proformaCfg.estado),
@@ -122,9 +150,14 @@ export async function createProformaPdfPage(
     properties[dateProp] = notionDate(today);
   }
 
-  const sprintId = await resolveCurrentSprintId();
+  // Sprint = el cuyo intervalo de fechas incluye hoy (America/Guayaquil).
+  const sprintId = await resolveSprintIdForDate(today);
   if (sprintId) {
     properties[props.sprint] = notionRelation([sprintId]);
+  } else {
+    console.warn(
+      `[notion-proforma] Sin sprint para la fecha ${today}; la tarea se crea sin relation Sprint.`
+    );
   }
 
   if (proformaCfg.responsableIds.length > 0) {
@@ -151,7 +184,7 @@ export async function createProformaPdfPage(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     throw new ServiceError(
-      `No se pudo crear la proforma en Notion. Verifica Proyecto/Categoria/Etiquetas y permisos. Detalle: ${message}`,
+      `No se pudo crear la proforma en Notion. Verifica Proyecto=Proformas, Tipo=Proforma y permisos. Detalle: ${message}`,
       502
     );
   }

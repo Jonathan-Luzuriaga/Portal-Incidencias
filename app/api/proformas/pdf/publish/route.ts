@@ -99,6 +99,12 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400 }
     );
   }
+  if (!cliente) {
+    return NextResponse.json(
+      { ok: false, error: "Falta cliente (columna Cliente de Notion)." } satisfies ProformaPublishResponse,
+      { status: 400 }
+    );
+  }
   if (horas === null) {
     return NextResponse.json(
       { ok: false, error: "horas debe ser un número entero mayor a 0." } satisfies ProformaPublishResponse,
@@ -136,7 +142,7 @@ export async function POST(request: Request): Promise<Response> {
       perfil,
       actividades: parseActividades(body.actividades),
       pdf,
-      cliente: cliente || undefined,
+      cliente,
     });
 
     const payload: ProformaPublishResponse = {

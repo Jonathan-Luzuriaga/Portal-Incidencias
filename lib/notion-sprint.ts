@@ -60,22 +60,34 @@ function normalizeStatus(value: string | null | undefined): string {
     .replace(/\p{M}/gu, "");
 }
 
+/** Preferido: rango de fechas que contiene `today`. Luego status Actual. Luego más reciente en el pasado. */
+export function pickSprintForDate(rows: SprintRow[], today: string): SprintRow | null {
+  if (rows.length === 0) return null;
+
+  const inRange = rows
+    .filter((r) => {
+      if (!r.start) return false;
+      const end = r.end ?? r.start;
+      return r.start <= today && today <= end;
+    })
+    .sort((a, b) => (b.start ?? "").localeCompare(a.start ?? ""));
+  if (inRange.length > 0) return inRange[0];
+
+  return null;
+}
+
 /** Preferido: status "Actual" / "Current". Luego rango de fechas. Luego más reciente en el pasado. */
 export function pickCurrentSprint(rows: SprintRow[], today: string): SprintRow | null {
   if (rows.length === 0) return null;
+
+  const byDate = pickSprintForDate(rows, today);
+  if (byDate) return byDate;
 
   const actual = rows.find((r) => {
     const s = normalizeStatus(r.status);
     return s === "actual" || s === "current" || s === "activo" || s === "en curso";
   });
   if (actual) return actual;
-
-  const inRange = rows.find((r) => {
-    if (!r.start) return false;
-    const end = r.end ?? r.start;
-    return r.start <= today && today <= end;
-  });
-  if (inRange) return inRange;
 
   const past = rows
     .filter((r) => r.start && r.start <= today)
@@ -118,7 +130,6 @@ async function querySprintPages(
 
 async function resolveSprintFromDatabase(sprintDbId: string): Promise<string | null> {
   const notion = getNotionClient();
-  const statusProp = sprintStatusPropName();
 
   const db = await notion.request<{ data_sources: Array<{ id: string }> }>({
     path: `databases/${sprintDbId}`,
@@ -127,8 +138,22 @@ async function resolveSprintFromDatabase(sprintDbId: string): Promise<string | n
   const dsId = db.data_sources?.[0]?.id;
   if (!dsId) return null;
 
-  // 1) Intento directo: filtrar por status Actual / Current / Activo
-  // Se prueba status y select por separado: un OR mixto falla si el tipo no coincide.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
+
+  // 1) Listar sprints y elegir por intervalo de fechas que contiene hoy
+  const pages = await querySprintPages(dsId, {});
+  const rows = pages.map(readSprintRow);
+  const byDate = pickSprintForDate(rows, today);
+  if (byDate) {
+    console.info(
+      `[notion-sprint] Sprint por fecha (${today}): ${byDate.name || byDate.id}` +
+        ` [${byDate.start ?? "?"} → ${byDate.end ?? byDate.start ?? "?"}]`
+    );
+    return byDate.id;
+  }
+
+  // 2) Fallback: status Actual / Current / Activo (si no hay fechas o no cubren hoy)
+  const statusProp = sprintStatusPropName();
   const statusValues = ["Actual", "Current", "Activo", "En curso"];
   const filterKinds = ["status", "select"] as const;
   for (const kind of filterKinds) {
@@ -144,7 +169,7 @@ async function resolveSprintFromDatabase(sprintDbId: string): Promise<string | n
         if (filtered.length > 0) {
           const row = readSprintRow(filtered[0]);
           console.info(
-            `[notion-sprint] Sprint activo por ${kind} "${equals}": ${row.name || row.id}`
+            `[notion-sprint] Sprint activo por ${kind} "${equals}" (sin match de fechas): ${row.name || row.id}`
           );
           return row.id;
         }
@@ -154,12 +179,7 @@ async function resolveSprintFromDatabase(sprintDbId: string): Promise<string | n
     }
   }
 
-  // 2) Fallback: listar todos y elegir por status / fechas
-  const pages = await querySprintPages(dsId, {});
-  const rows = pages.map(readSprintRow);
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
   const current = pickCurrentSprint(rows, today);
-
   if (!current) {
     console.warn(
       `[notion-sprint] No se encontró sprint vigente entre ${rows.length} filas (hoy=${today}).`
@@ -168,15 +188,56 @@ async function resolveSprintFromDatabase(sprintDbId: string): Promise<string | n
   }
 
   console.info(
-    `[notion-sprint] Sprint resuelto: ${current.name || current.id}` +
+    `[notion-sprint] Sprint resuelto (fallback): ${current.name || current.id}` +
       ` (status=${current.status ?? "n/a"}, start=${current.start ?? "n/a"})`
   );
   return current.id;
 }
 
 /**
+ * Resuelve el sprint cuyo rango de fechas incluye `isoDate` (YYYY-MM-DD, p. ej. hoy Guayaquil).
+ * No usa status "Actual" ni NOTION_SPRINT_RELATION_ID: solo el intervalo Fechas.
+ */
+export async function resolveSprintIdForDate(isoDate: string): Promise<string | null> {
+  const sprintDbId = process.env.NOTION_SPRINT_DATABASE_ID?.trim();
+  if (!sprintDbId) {
+    console.warn("[notion-sprint] Falta NOTION_SPRINT_DATABASE_ID para resolver por fecha.");
+    return null;
+  }
+
+  try {
+    const notion = getNotionClient();
+    const db = await notion.request<{ data_sources: Array<{ id: string }> }>({
+      path: `databases/${sprintDbId}`,
+      method: "get",
+    });
+    const dsId = db.data_sources?.[0]?.id;
+    if (!dsId) return null;
+
+    const pages = await querySprintPages(dsId, {});
+    const rows = pages.map(readSprintRow);
+    const match = pickSprintForDate(rows, isoDate);
+    if (!match) {
+      console.warn(
+        `[notion-sprint] Ningún sprint cubre la fecha ${isoDate} (${rows.length} filas).`
+      );
+      return null;
+    }
+    console.info(
+      `[notion-sprint] Sprint para ${isoDate}: ${match.name || match.id}` +
+        ` [${match.start ?? "?"} → ${match.end ?? match.start ?? "?"}]`
+    );
+    return match.id;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error desconocido";
+    console.warn("[notion-sprint] resolveSprintIdForDate falló:", msg);
+    return null;
+  }
+}
+
+/**
  * Resuelve el sprint vigente.
- * Prioridad: BD Notion (status Actual → rango de fechas) → NOTION_SPRINT_RELATION_ID.
+ * Prioridad: intervalo de fechas que incluye hoy → status Actual → NOTION_SPRINT_RELATION_ID.
  * El id fijo de env solo se usa como último recurso, para no asignar un sprint viejo.
  */
 export async function resolveCurrentSprintId(): Promise<string | null> {

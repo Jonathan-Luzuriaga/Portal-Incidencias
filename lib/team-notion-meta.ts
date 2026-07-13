@@ -279,6 +279,28 @@ export async function listClientProjectOptions(): Promise<TeamClientProjectOptio
   }
 }
 
+/** Opciones de Cliente (multi_select) desde el esquema de la BD Tareas. */
+export async function listClientOptions(): Promise<string[]> {
+  const config = getNotionConfig();
+  const propName = config.props.client;
+
+  try {
+    const properties = await getTasksSchemaProperties();
+    const prop = properties[propName];
+    const options = prop?.multi_select?.options ?? prop?.select?.options ?? [];
+    const names = options.map((o) => o.name).filter(Boolean);
+    if (names.length > 0) {
+      return [...names].sort((a, b) => a.localeCompare(b, "es"));
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error desconocido";
+    console.warn("[team-notion-meta] listClientOptions falló:", msg);
+  }
+
+  const { TEAM_CLIENTS } = await import("./team-types");
+  return [...TEAM_CLIENTS];
+}
+
 async function resolvePersonUser(
   notion: ReturnType<typeof getNotionClient>,
   id: string,

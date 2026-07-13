@@ -33,6 +33,12 @@ export function buildProjectRelationMap(): Map<string, string> {
   );
   if (propuestasId) map.set(normalizeTeamLabel("Propuestas"), propuestasId);
 
+  const proformasId = readEnvId(
+    "NOTION_PROFORMA_PROJECT_RELATION_ID",
+    "NOTION_PROFORMAS_PROJECT_RELATION_ID"
+  );
+  if (proformasId) map.set(normalizeTeamLabel("Proformas"), proformasId);
+
   const rawMap = process.env.NOTION_PROJECT_RELATION_MAP?.trim();
   if (rawMap) {
     try {
