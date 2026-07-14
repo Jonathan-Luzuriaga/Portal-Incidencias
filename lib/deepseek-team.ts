@@ -14,6 +14,8 @@ import type {
 } from "./team-types";
 import { TEAM_CLIENTS, TEAM_PRIORITIES, TEAM_TICKET_TYPES } from "./team-types";
 
+const EPIC_TITLE_PREFIX = "EPIC-";
+
 const SYSTEM_PROMPT = `Eres un asistente de gestión de proyectos en Manticore Labs. Recibes una descripción en bruto y la transformas en una tarea lista para Notion.
 
 Devuelve ÚNICAMENTE un JSON válido con esta estructura:
@@ -33,6 +35,7 @@ NO incluyas ticketType, client ni clientProject en el JSON: el PM ya los eligió
 bodyMarkdown según el tipo indicado por el PM:
 
 **Bug (QA — mantener este formato exacto):**
+title: SIN prefijo "EPIC-". Título normal y accionable.
 ## Contexto
 ## Detalle técnico
 ## Pasos para reproducir
@@ -40,6 +43,7 @@ bodyMarkdown según el tipo indicado por el PM:
 subtasks: []
 
 **Tarea (simple — estilo PM conciso, sin sobrecargar):**
+title: SIN prefijo "EPIC-". Título normal y accionable.
 Ajusta el nivel de detalle al contexto:
 - Idea breve (1-2 líneas): Contexto + Objetivo + Criterio de cierre (3 secciones cortas).
 - Idea media: añade Alcance breve y 2-4 criterios de aceptación.
@@ -48,6 +52,8 @@ Usa ## para secciones. Sin emojis. Texto directo y completo pero no redundante.
 subtasks: [] SIEMPRE (las tareas no llevan subtareas).
 
 **Épica (formato completo):**
+title: DEBE comenzar exactamente con el prefijo "EPIC-" antes de cualquier otro texto
+(ej. "EPIC-Integración de pagos"). No uses "EPIC-" en subtareas ni en otros tipos.
 ## Contexto
 ## Objetivo
 ## Alcance
@@ -63,7 +69,8 @@ subtasks: 2-6 subtareas recomendadas. Cada subtarea debe incluir bodyMarkdown CO
 Reglas generales:
 - Corrige ortografía; no inventes requisitos fuera del alcance descrito.
 - tags: incluye "tareas"; añade "bugs" solo si el tipo es Bug; añade "qa" si el ambiente es QA.
-- priority: Alta solo si es crítico o bloqueante.`;
+- priority: Alta solo si es crítico o bloqueante.
+- Prefijo "EPIC-" solo cuando el tipo elegido por el PM es Épica.`;
 
 interface DeepSeekResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -89,6 +96,20 @@ function allowedValuesPrompt(): string {
 function firstLine(text: string): string {
   const line = text.split("\n").map((l) => l.trim()).find(Boolean);
   return line ?? "Nueva tarea";
+}
+
+/**
+ * Garantiza el prefijo "EPIC-" solo para épicas (al inicio del título).
+ * No duplica el prefijo si ya viene en el texto.
+ */
+export function ensureEpicTitlePrefix(title: string, ticketType: TeamTicketType): string {
+  const trimmed = title.trim();
+  if (ticketType !== "Épica") {
+    return trimmed.slice(0, 120);
+  }
+
+  const rest = trimmed.replace(/^EPIC-\s*/i, "").trim() || "Nueva épica";
+  return `${EPIC_TITLE_PREFIX}${rest}`.slice(0, 120);
 }
 
 function sanitizeSubtasks(raw: unknown, ticketType: TeamTicketType): FormattedSubtask[] {
@@ -126,8 +147,8 @@ function buildFallbackBody(raw: string, ticketType: TeamTicketType): string {
 }
 
 function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
-  const title = firstLine(raw).slice(0, 120);
   const ticketType = hints.ticketType ?? "Tarea";
+  const title = ensureEpicTitlePrefix(firstLine(raw), ticketType);
   const meta = hints.clientProject
     ? { clientProject: resolveTeamClientProject(hints.clientProject), client: hints.client ?? "Manticore Labs" as TeamClient }
     : { clientProject: "[ML][Gestion]", client: "Manticore Labs" as TeamClient };
@@ -214,7 +235,7 @@ function sanitizeFormatted(
   const subtasks = sanitizeSubtasks(parsed.subtasks, ticketType);
 
   return {
-    title: String(parsed.title ?? fallback.title).slice(0, 120),
+    title: ensureEpicTitlePrefix(String(parsed.title ?? fallback.title), ticketType),
     shortDescription: String(parsed.shortDescription ?? fallback.shortDescription).slice(0, 200),
     bodyMarkdown: String(parsed.bodyMarkdown ?? fallback.bodyMarkdown),
     ticketType,
