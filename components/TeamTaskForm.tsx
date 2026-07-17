@@ -9,6 +9,7 @@ import {
   DEFAULT_TEAM_CLIENT_PROJECT,
   TEAM_CATEGORY_OPTIONS,
   TEAM_TAG_SUGGESTIONS,
+  categoryFromScopes,
 } from "@/lib/team-profiles";
 import type {
   CreatedTeamTaskSummary,
@@ -103,7 +104,7 @@ export default function TeamTaskForm() {
   const [projectRelationId, setProjectRelationId] = useState("");
   const [clientProject, setClientProject] = useState(DEFAULT_TEAM_CLIENT_PROJECT);
   const [environment, setEnvironment] = useState<TeamEnvironment>("Desarrollo");
-  const [scope, setScope] = useState<TeamScope>("Frontend");
+  const [scopes, setScopes] = useState<TeamScope[]>(["Frontend"]);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [parentTaskId, setParentTaskId] = useState("");
@@ -284,7 +285,7 @@ export default function TeamTaskForm() {
           projectLabel,
           clientProject,
           environment,
-          scope,
+          scope: scopes.join(","),
         }),
       });
 
@@ -385,7 +386,7 @@ export default function TeamTaskForm() {
       formData.set("projectLabel", projectLabel);
       formData.set("clientProject", clientProject);
       formData.set("environment", environment);
-      formData.set("scope", scope);
+      formData.set("scope", scopes.join(","));
       formData.set("parentTaskId", ticketType === "Tarea" ? parentTaskId : "");
       for (const file of evidenceFiles) {
         formData.append("images", file);
@@ -434,7 +435,7 @@ export default function TeamTaskForm() {
     setParentTaskId("");
     setParentTypeFilter("Épica");
     setEnvironment("Desarrollo");
-    setScope("Frontend");
+    setScopes(["Frontend"]);
     if (clientProjects.length > 0) {
       setClientProject(clientProjects[0].value);
     }
@@ -585,24 +586,35 @@ export default function TeamTaskForm() {
 
         <div>
           <span className={labelClasses}>Área</span>
-          <div className="flex gap-2">
-            {TEAM_SCOPES.map((area) => (
-              <button
-                key={area}
-                type="button"
-                disabled={busy}
-                className={typeButtonClass(scope === area)}
-                onClick={() => {
-                  setScope(area);
-                  setCategory(area === "Fullstack" ? "Workflows" : area);
-                  setAiPrepared(false);
-                }}
-              >
-                {area}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {TEAM_SCOPES.map((area) => {
+              const active = scopes.includes(area);
+              return (
+                <button
+                  key={area}
+                  type="button"
+                  disabled={busy}
+                  className={typeButtonClass(active)}
+                  onClick={() => {
+                    setScopes((prev) => {
+                      const next = prev.includes(area)
+                        ? prev.filter((s) => s !== area)
+                        : [...prev, area];
+                      // Mantener al menos un área seleccionada
+                      if (next.length === 0) return prev;
+                      setCategory(categoryFromScopes(next));
+                      return next;
+                    });
+                    setAiPrepared(false);
+                  }}
+                >
+                  {area}
+                </button>
+              );
+            })}
           </div>
-          <input type="hidden" name="scope" value={scope} />
+          <p className="mt-1.5 text-xs text-[#9b9a97]">Puedes seleccionar más de un área.</p>
+          <input type="hidden" name="scope" value={scopes.join(",")} />
         </div>
 
         <div>

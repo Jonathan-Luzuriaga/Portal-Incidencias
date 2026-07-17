@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { formatTeamTaskFromRaw } from "@/lib/deepseek-team";
-import { inferClientFromClientProject, resolveTeamClientProject } from "@/lib/team-profiles";
+import {
+  inferClientFromClientProject,
+  parseTeamScopes,
+  resolveTeamClientProject,
+} from "@/lib/team-profiles";
 import {
   TeamStructureApiResponse,
   TEAM_TICKET_TYPES,
@@ -42,6 +46,7 @@ export async function POST(request: Request): Promise<NextResponse<TeamStructure
   const ticketType = TEAM_TICKET_TYPES.includes(ticketTypeRaw) ? ticketTypeRaw : "Tarea";
   const clientProject = resolveTeamClientProject(body.clientProject);
   const client = inferClientFromClientProject(clientProject);
+  const scopes = parseTeamScopes(body.scope);
 
   try {
     const formatted = await formatTeamTaskFromRaw(rawDescription, {
@@ -50,7 +55,7 @@ export async function POST(request: Request): Promise<NextResponse<TeamStructure
       client,
       projectLabel: String(body.projectLabel ?? "").trim() || undefined,
       environment: body.environment as "Desarrollo" | "QA" | "Despliegue" | undefined,
-      scope: body.scope as "Frontend" | "Backend" | "Fullstack" | undefined,
+      scopes,
     });
 
     return NextResponse.json<TeamStructureApiResponse>({ ok: true, formatted });

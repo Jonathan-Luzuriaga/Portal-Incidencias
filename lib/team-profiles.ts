@@ -1,4 +1,5 @@
 import type { TeamClient, TeamClientProjectOption, TeamEnvironment, TeamScope } from "./team-types";
+import { TEAM_SCOPES } from "./team-types";
 
 /** Proyectos válidos en la columna Proyecto de Notion. */
 export const TEAM_PROJECT_NAMES = [
@@ -122,10 +123,41 @@ const CLIENT_PROJECT_TO_TAG: Record<string, string> = {
   "[BAGO][REGA]": "rega",
 };
 
-export function scopeToCategories(scope: TeamScope): string[] {
-  if (scope === "Frontend") return ["Frontend"];
-  if (scope === "Backend") return ["Backend"];
-  return ["Frontend", "Backend"];
+/** Parsea "Frontend, Notion" (o un solo valor) a scopes válidos. */
+export function parseTeamScopes(raw: string | null | undefined): TeamScope[] {
+  const parts = String(raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const valid = parts.filter((s): s is TeamScope =>
+    (TEAM_SCOPES as readonly string[]).includes(s)
+  );
+  return valid.length > 0 ? valid : ["Frontend"];
+}
+
+export function formatTeamScopes(scopes: TeamScope | TeamScope[]): string {
+  const list = Array.isArray(scopes) ? scopes : [scopes];
+  return list.join(", ");
+}
+
+export function scopeToCategories(scopes: TeamScope | TeamScope[]): string[] {
+  const list = Array.isArray(scopes) ? scopes : [scopes];
+  const cats = new Set<string>();
+  for (const scope of list) {
+    if (scope === "Frontend") cats.add("Frontend");
+    if (scope === "Backend") cats.add("Backend");
+  }
+  return [...cats];
+}
+
+/** Categoría sugerida según las áreas elegidas. */
+export function categoryFromScopes(scopes: TeamScope[]): string {
+  const hasFe = scopes.includes("Frontend");
+  const hasBe = scopes.includes("Backend");
+  if (hasFe && hasBe) return "Workflows";
+  if (hasFe) return "Frontend";
+  if (hasBe) return "Backend";
+  return "Workflows";
 }
 
 export function environmentToTag(env: TeamEnvironment): string {
@@ -203,10 +235,15 @@ export function getDefaultTeamTags(
 }
 
 /** Prefija ambiente y área al cuerpo markdown si aún no están. */
-export function buildTeamBodyMarkdown(bodyMarkdown: string, environment: TeamEnvironment, scope: TeamScope): string {
+export function buildTeamBodyMarkdown(
+  bodyMarkdown: string,
+  environment: TeamEnvironment,
+  scopes: TeamScope | TeamScope[]
+): string {
   const base = bodyMarkdown.trim();
   if (base.includes("## Ambiente") || base.includes("## Área")) return base;
 
-  const header = `## Ambiente\n${environment}\n\n## Área\n${scope}\n\n`;
+  const areaLabel = formatTeamScopes(scopes);
+  const header = `## Ambiente\n${environment}\n\n## Área\n${areaLabel}\n\n`;
   return base ? header + base : header.trimEnd();
 }

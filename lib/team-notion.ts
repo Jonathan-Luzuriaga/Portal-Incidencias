@@ -40,7 +40,7 @@ export async function createTeamTaskPage(
   const bodyMarkdown = buildTeamBodyMarkdown(
     form.bodyMarkdown,
     form.environment,
-    form.scope
+    form.scopes
   );
   const bodyBlocks = [
     ...(bodyMarkdown ? markdownToNotionBlocks(bodyMarkdown) : []),

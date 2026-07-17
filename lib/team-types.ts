@@ -14,9 +14,20 @@ export type TeamEnvironment = "Desarrollo" | "QA" | "Despliegue";
 
 export const TEAM_ENVIRONMENTS: TeamEnvironment[] = ["Desarrollo", "QA", "Despliegue"];
 
-export type TeamScope = "Frontend" | "Backend" | "Fullstack";
+export type TeamScope =
+  | "Frontend"
+  | "Backend"
+  | "Data Base"
+  | "Notion"
+  | "MLabs-ia";
 
-export const TEAM_SCOPES: TeamScope[] = ["Frontend", "Backend", "Fullstack"];
+export const TEAM_SCOPES: TeamScope[] = [
+  "Frontend",
+  "Backend",
+  "Data Base",
+  "Notion",
+  "MLabs-ia",
+];
 
 export interface TeamProjectOption {
   relationId: string;
@@ -74,7 +85,8 @@ export interface TeamTaskFormData {
   parentTaskId: string;
   additionalTasks: TeamAdditionalTaskInput[];
   environment: TeamEnvironment;
-  scope: TeamScope;
+  /** Una o más áreas técnicas seleccionadas en el formulario. */
+  scopes: TeamScope[];
   categories: string[];
   category: string;
   tags: string[];

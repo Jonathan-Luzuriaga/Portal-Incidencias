@@ -19,7 +19,7 @@ export function applyFormattedTeamTask(
   formatted: FormattedTeamTask
 ): TeamTaskFormData {
   const clientProject = form.clientProject || formatted.clientProject;
-  const categories = scopeToCategories(form.scope);
+  const categories = scopeToCategories(form.scopes);
 
   let subtasks =
     form.ticketType === "Épica"
@@ -38,7 +38,7 @@ export function applyFormattedTeamTask(
   const bodyMarkdown = buildTeamBodyMarkdown(
     formatted.bodyMarkdown,
     form.environment,
-    form.scope
+    form.scopes
   );
 
   return {
@@ -50,7 +50,7 @@ export function applyFormattedTeamTask(
     category: form.category || categories[0] || formatted.category,
     categories,
     environment: form.environment,
-    scope: form.scope,
+    scopes: form.scopes,
     tags: formatted.tags,
     client: inferClientFromClientProject(clientProject),
     clientProject,
@@ -73,9 +73,9 @@ async function resolveTaskForm(
   let finalForm: TeamTaskFormData = {
     ...base,
     client: inferClientFromClientProject(base.clientProject),
-    categories: base.categories.length > 0 ? base.categories : scopeToCategories(base.scope),
-    category: base.category || scopeToCategories(base.scope)[0] || "Workflows",
-    bodyMarkdown: buildTeamBodyMarkdown(base.bodyMarkdown, base.environment, base.scope),
+    categories: base.categories.length > 0 ? base.categories : scopeToCategories(base.scopes),
+    category: base.category || scopeToCategories(base.scopes)[0] || "Workflows",
+    bodyMarkdown: buildTeamBodyMarkdown(base.bodyMarkdown, base.environment, base.scopes),
     subtasks: base.ticketType === "Épica" ? base.subtasks : [],
     additionalTasks: base.ticketType === "Tarea" ? base.additionalTasks : [],
   };
@@ -88,7 +88,7 @@ async function resolveTaskForm(
       client: inferClientFromClientProject(base.clientProject),
       projectLabel: options.projectLabel,
       environment: base.environment,
-      scope: base.scope,
+      scopes: base.scopes,
     });
     finalForm = applyFormattedTeamTask(base, formatted);
   }
@@ -137,11 +137,11 @@ export async function processAndCreateTeamTask(
     const subtasks = finalForm.subtasks.filter((s) => s.enabled && s.title.trim());
     for (const sub of subtasks) {
       const subBody = sub.bodyMarkdown?.trim()
-        ? buildTeamBodyMarkdown(sub.bodyMarkdown, finalForm.environment, finalForm.scope)
+        ? buildTeamBodyMarkdown(sub.bodyMarkdown, finalForm.environment, finalForm.scopes)
         : buildTeamBodyMarkdown(
             `## Contexto\nSubtarea de la épica **${finalForm.title}**.\n\n## Objetivo\n${sub.shortDescription || sub.title}\n\n## Alcance\n(Por completar)\n\n## Criterios de aceptación\n- `,
             finalForm.environment,
-            finalForm.scope
+            finalForm.scopes
           );
 
       const subPage = await createTeamTaskPage(
@@ -178,7 +178,7 @@ export async function processAndCreateTeamTask(
         ...finalForm,
         title: extra.title,
         shortDescription: extra.shortDescription,
-        bodyMarkdown: buildTeamBodyMarkdown(extra.bodyMarkdown, finalForm.environment, finalForm.scope),
+        bodyMarkdown: buildTeamBodyMarkdown(extra.bodyMarkdown, finalForm.environment, finalForm.scopes),
         subtasks: [],
         additionalTasks: [],
       };
@@ -190,7 +190,7 @@ export async function processAndCreateTeamTask(
           client: finalForm.client,
           projectLabel: options?.projectLabel,
           environment: finalForm.environment,
-          scope: finalForm.scope,
+          scopes: finalForm.scopes,
         });
         extraForm = {
           ...extraForm,
@@ -199,7 +199,7 @@ export async function processAndCreateTeamTask(
           bodyMarkdown: buildTeamBodyMarkdown(
             formatted.bodyMarkdown,
             finalForm.environment,
-            finalForm.scope
+            finalForm.scopes
           ),
           priority: formatted.priority,
           category: formatted.category,

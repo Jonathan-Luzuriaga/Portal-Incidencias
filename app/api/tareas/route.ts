@@ -3,20 +3,19 @@ import { processAndCreateTeamTask } from "@/lib/team-pipeline";
 import {
   inferClientFromClientProject,
   resolveTeamClientProject,
+  parseTeamScopes,
   scopeToCategories,
   TEAM_CATEGORY_OPTIONS,
 } from "@/lib/team-profiles";
 import {
   TEAM_ENVIRONMENTS,
   TEAM_PRIORITIES,
-  TEAM_SCOPES,
   TEAM_TICKET_TYPES,
   TeamTaskApiResponse,
   TeamTaskFormData,
   TeamAdditionalTaskInput,
   TeamEnvironment,
   TeamPriority,
-  TeamScope,
   TeamSubtaskInput,
   TeamTicketType,
 } from "@/lib/team-types";
@@ -110,7 +109,7 @@ function parseForm(
   const parentTaskId = String(form.get("parentTaskId") ?? "").trim();
   const clientProject = resolveTeamClientProject(String(form.get("clientProject") ?? ""));
   const environmentRaw = String(form.get("environment") ?? "Desarrollo").trim() as TeamEnvironment;
-  const scopeRaw = String(form.get("scope") ?? "Frontend").trim() as TeamScope;
+  const scopes = parseTeamScopes(String(form.get("scope") ?? "Frontend"));
   const category = String(form.get("category") ?? "").trim();
   const tags = parseTags(String(form.get("tags") ?? ""));
   const subtasks = parseSubtasks(String(form.get("subtasksJson") ?? ""));
@@ -119,8 +118,7 @@ function parseForm(
   const hours = parseHours(String(form.get("hours") ?? ""));
 
   const environment = TEAM_ENVIRONMENTS.includes(environmentRaw) ? environmentRaw : "Desarrollo";
-  const scope = TEAM_SCOPES.includes(scopeRaw) ? scopeRaw : "Frontend";
-  const categories = scopeToCategories(scope);
+  const categories = scopeToCategories(scopes);
 
   if (!rawInput && !title) {
     return "Describe la idea o espera el preview de la IA.";
@@ -129,6 +127,7 @@ function parseForm(
   if (!projectRelationId) return "Selecciona un proyecto.";
   if (!clientProject) return "Selecciona el Proyecto Cliente.";
   if (!TEAM_TICKET_TYPES.includes(ticketType)) return "Selecciona un tipo válido.";
+  if (scopes.length === 0) return "Selecciona al menos un área.";
   if (
     category &&
     !TEAM_CATEGORY_OPTIONS.includes(category as (typeof TEAM_CATEGORY_OPTIONS)[number])
@@ -156,7 +155,7 @@ function parseForm(
     parentTaskId,
     additionalTasks,
     environment,
-    scope,
+    scopes,
     categories,
     category: category || categories[0] || "Workflows",
     tags,

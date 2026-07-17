@@ -67,7 +67,10 @@ function buildSubtaskForm(
 ): TeamTaskFormData {
   const config = getNotionConfig();
   const teamEnvironment = mapIncidentEnvironment(base.environment);
-  const bodyMarkdown = buildTeamBodyMarkdown(base.bodyMarkdown, teamEnvironment, "Fullstack");
+  const bodyMarkdown = buildTeamBodyMarkdown(base.bodyMarkdown, teamEnvironment, [
+    "Frontend",
+    "Backend",
+  ]);
 
   return {
     title: base.title.trim(),
@@ -83,7 +86,7 @@ function buildSubtaskForm(
     parentTaskId: base.parentTaskId,
     additionalTasks: [],
     environment: teamEnvironment,
-    scope: "Fullstack",
+    scopes: ["Frontend", "Backend"],
     categories: ["BUG", "Frontend"],
     category: "BUG",
     tags: base.tags,

@@ -82,7 +82,7 @@ export interface TeamFormatHints {
   ticketType?: TeamTicketType;
   projectLabel?: string;
   environment?: TeamEnvironment;
-  scope?: TeamScope;
+  scopes?: TeamScope[];
 }
 
 function allowedValuesPrompt(): string {
@@ -154,10 +154,12 @@ function buildFallback(raw: string, hints: TeamFormatHints): FormattedTeamTask {
     : { clientProject: "[ML][Gestion]", client: "Manticore Labs" as TeamClient };
 
   const isBug = ticketType === "Bug";
+  const hasBackend = hints.scopes?.includes("Backend");
+  const hasFrontend = hints.scopes?.includes("Frontend");
   const scopeCategory =
-    hints.scope === "Backend"
+    hasBackend && !hasFrontend
       ? "Backend"
-      : hints.scope === "Frontend"
+      : hasFrontend && !hasBackend
         ? "Frontend"
         : isBug
           ? "BUG"
@@ -288,7 +290,9 @@ export async function formatTeamTaskFromRaw(
     hints.projectLabel ? `Proyecto: ${hints.projectLabel}` : "",
     hints.clientProject ? `Proyecto Cliente: ${hints.clientProject}` : "",
     hints.environment ? `Ambiente elegido por PM: ${hints.environment}` : "",
-    hints.scope ? `Área técnica elegida por PM: ${hints.scope}` : "",
+    hints.scopes?.length
+      ? `Áreas técnicas elegidas por PM: ${hints.scopes.join(", ")}`
+      : "",
     "",
     "Descripción en bruto:",
     raw,
