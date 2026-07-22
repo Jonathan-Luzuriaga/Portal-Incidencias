@@ -22,9 +22,23 @@ function round2(n: number): number {
 
 /**
  * Calcula subtotal, IVA (15%) y total para una proforma según horas y perfil.
+ * Si `esGarantia` es true, fuerza montos a 0 (cotización cubierta por garantía).
  */
-export function calcularProforma(horas: number, perfil: PerfilDesarrollador): ResultadoProforma {
+export function calcularProforma(
+  horas: number,
+  perfil: PerfilDesarrollador,
+  esGarantia = false
+): ResultadoProforma {
   const tarifaAplicada = TARIFAS_MANTICORE[perfil];
+  if (esGarantia) {
+    return {
+      tarifaAplicada,
+      subtotal: 0,
+      iva: 0,
+      total: 0,
+    };
+  }
+
   const subtotal = round2(horas * tarifaAplicada);
   const iva = round2(subtotal * IVA_RATE);
   const total = round2(subtotal + iva);

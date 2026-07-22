@@ -19,6 +19,7 @@ export interface ProformaPdfBody {
   horas: number;
   perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
+  esGarantia?: boolean;
 }
 
 function buildContentDisposition(codigoProyecto: string): string {
@@ -40,6 +41,15 @@ function parseHoras(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.round(n);
+}
+
+function parseEsGarantia(raw: unknown): boolean {
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw === 1;
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return value === "1" || value === "true" || value === "si" || value === "sí" || value === "yes";
 }
 
 function parseActividades(raw: unknown): ProformaActividadInput[] {
@@ -73,6 +83,7 @@ function validatePdfInput(body: {
   horas?: unknown;
   perfil?: unknown;
   actividades?: unknown;
+  esGarantia?: unknown;
 }): {
   ok: true;
   data: ProformaPdfBody;
@@ -82,6 +93,7 @@ function validatePdfInput(body: {
   const descripcion = String(body.descripcion ?? "").trim();
   const horas = parseHoras(body.horas);
   const perfil = parsePerfil(body.perfil);
+  const esGarantia = parseEsGarantia(body.esGarantia);
 
   const codigoProyecto = formatCodigoProyecto(codigoProyectoRaw);
   if (!codigoProyecto) {
@@ -109,6 +121,7 @@ function validatePdfInput(body: {
       horas,
       perfil,
       actividades: parseActividades(body.actividades),
+      esGarantia,
     },
   };
 }
@@ -176,6 +189,7 @@ export async function GET(request: Request): Promise<Response> {
     horas: searchParams.get("horas") ?? "",
     perfil: searchParams.get("perfil") ?? "",
     actividades: parseActividadesFromQuery(searchParams.get("actividades")),
+    esGarantia: searchParams.get("esGarantia") ?? "",
   });
 
   if (!validated.ok) {

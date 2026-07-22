@@ -33,6 +33,7 @@ export interface CreateProformaPdfPageArgs {
   horas: number;
   perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
+  esGarantia?: boolean;
   pdf: Buffer | Uint8Array;
   /** Valor columna Cliente (multi_select). */
   cliente?: string;
@@ -48,6 +49,8 @@ export interface CreateProformaPdfPageResult {
 function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnType<typeof calcularProforma>): string {
   const codigoEstimacion = formatCodigoEstimacion(args.codigoEstimacion) || args.codigoEstimacion;
   const actividades = (args.actividades ?? []).filter((a) => a.actividad.trim() || a.descripcion.trim());
+  const esGarantia = Boolean(args.esGarantia);
+  const totalLabel = esGarantia ? "Garantía" : `USD ${totales.total.toFixed(2)}`;
 
   const lines: string[] = [
     "## Contexto de la proforma",
@@ -56,11 +59,12 @@ function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnTy
     "",
     `- **Proyecto:** ${args.codigoProyecto}`,
     `- **Estimación:** ${codigoEstimacion}`,
+    `- **Garantía:** ${esGarantia ? "Sí" : "No"}`,
     `- **Perfil:** ${args.perfil}`,
     `- **Horas:** ${args.horas}`,
     `- **Subtotal:** USD ${totales.subtotal.toFixed(2)}`,
     `- **IVA (15%):** USD ${totales.iva.toFixed(2)}`,
-    `- **Total:** USD ${totales.total.toFixed(2)}`,
+    `- **Total:** ${totalLabel}`,
     "",
     "### Descripción",
     "",
@@ -118,16 +122,18 @@ export async function createProformaPdfPage(
 
   const codigoEstimacion = formatCodigoEstimacion(args.codigoEstimacion) || args.codigoEstimacion.trim();
   const filename = `${args.codigoProyecto}.pdf`;
-  const totales = calcularProforma(args.horas, args.perfil);
+  const esGarantia = Boolean(args.esGarantia);
+  const totales = calcularProforma(args.horas, args.perfil, esGarantia);
   const cliente = (args.cliente ?? "").trim() || proformaCfg.clientDefault;
 
   const fileUploadId = await uploadBufferToNotion(args.pdf, filename, "application/pdf");
   const projectId = await resolveProformasProjectId(proformaCfg.projectRelationId);
 
-  const title = `Proforma — ${args.codigoProyecto} / ${codigoEstimacion}`;
+  const title = `Proforma${esGarantia ? " (Garantía)" : ""} — ${args.codigoProyecto} / ${codigoEstimacion}`;
+  const totalLabel = esGarantia ? "Garantía" : `USD ${totales.total.toFixed(2)}`;
   const shortDescription = `${args.descripcion.trim().slice(0, 180)}${
     args.descripcion.trim().length > 180 ? "…" : ""
-  } · ${args.horas}h · ${args.perfil} · USD ${totales.total.toFixed(2)}`;
+  } · ${args.horas}h · ${args.perfil} · ${totalLabel}`;
 
   const bodyBlocks: BlockObjectRequest[] = [
     ...markdownToNotionBlocks(buildContextMarkdown(args, totales)),
