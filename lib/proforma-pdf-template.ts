@@ -24,6 +24,8 @@ export interface ProformaPdfDatos {
   horas: number;
   perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
+  /** Si true, montos a $0 y Total muestra "Garantía". */
+  esGarantia?: boolean;
   /** Data URI o URL pública del logo; vacío = texto de respaldo */
   logoSrc?: string;
   fechaEstimacion?: Date;
@@ -98,7 +100,10 @@ function renderLineas(lineas: string[]): string {
   return lineas.map((linea) => `<p>${esc(linea)}</p>`).join("\n");
 }
 
-function renderActividadesTable(actividades: ProformaActividadInput[]): string {
+function renderActividadesTable(
+  actividades: ProformaActividadInput[],
+  esGarantia: boolean
+): string {
   const filas = actividades.filter((a) => a.actividad.trim() || a.descripcion.trim());
   if (filas.length === 0) return "";
 
@@ -114,8 +119,13 @@ function renderActividadesTable(actividades: ProformaActividadInput[]): string {
     )
     .join("\n");
 
+  const notaGarantia = esGarantia
+    ? `<p class="proforma-actividades-nota">Cotización cubierta por garantía. Las horas y el alcance se detallan solo como referencia.</p>`
+    : "";
+
   return `
         <h2 class="proforma-actividades-title">Actividades</h2>
+        ${notaGarantia}
         <table class="data-table data-table-actividades">
           <thead>
             <tr>
@@ -134,8 +144,11 @@ function renderActividadesTable(actividades: ProformaActividadInput[]): string {
         </table>`;
 }
 
-function renderActividadesBlock(actividades: ProformaActividadInput[]): string {
-  const table = renderActividadesTable(actividades);
+function renderActividadesBlock(
+  actividades: ProformaActividadInput[],
+  esGarantia: boolean
+): string {
+  const table = renderActividadesTable(actividades, esGarantia);
   if (!table) return "";
   return `<div class="proforma-actividades-block">${table}</div>`;
 }
@@ -153,8 +166,9 @@ function renderPageFooter(pageNumber: number, email: string): string {
  * réplica visual del formato Zoho usado en las proformas de referencia.
  */
 export function generarHtmlProforma(datos: ProformaPdfDatos): string {
-  const calculo = calcularProforma(datos.horas, datos.perfil);
-  const tarifa = TARIFAS_MANTICORE[datos.perfil];
+  const esGarantia = Boolean(datos.esGarantia);
+  const calculo = calcularProforma(datos.horas, datos.perfil, esGarantia);
+  const tarifa = esGarantia ? 0 : TARIFAS_MANTICORE[datos.perfil];
   const fecha = datos.fechaEstimacion ?? new Date();
   const validezDias = datos.validezDias ?? VALIDEZ_DIAS_DEFAULT;
   const fechaVencimiento = addDays(fecha, validezDias);
@@ -163,8 +177,12 @@ export function generarHtmlProforma(datos: ProformaPdfDatos): string {
   const cliente = datos.cliente ?? CLIENTE_BAGO_DEFAULT;
   const articulo = buildArticuloDescripcion(codigoProyecto, datos.descripcion);
   const logo = datos.logoSrc?.trim() ?? "";
-  const actividadesBlock = renderActividadesBlock(datos.actividades ?? []);
+  const actividadesBlock = renderActividadesBlock(datos.actividades ?? [], esGarantia);
   const hasSecondPage = Boolean(actividadesBlock);
+  const totalLabel = esGarantia ? "Garantía" : `$${formatMoney(calculo.total)}`;
+  const garantiaBadge = esGarantia
+    ? `<p class="proforma-garantia-badge">Garantía</p>`
+    : "";
 
   const logoBlock = logo
     ? `<img class="proforma-logo" src="${logo}" alt="Manticore Labs" />`
@@ -175,7 +193,7 @@ export function generarHtmlProforma(datos: ProformaPdfDatos): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Estimación ${esc(codigoEstimacion)} — Manticore Labs</title>
+  <title>Estimación ${esc(codigoEstimacion)}${esGarantia ? " (Garantía)" : ""} — Manticore Labs</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>${CORPORATE_CSS}</style>
   <style>${PROFORMA_CSS}</style>
@@ -188,6 +206,7 @@ export function generarHtmlProforma(datos: ProformaPdfDatos): string {
           <div>
             <h1 class="proforma-title">ESTIMACIÓN</h1>
             <p class="proforma-number"># ${esc(codigoEstimacion)}</p>
+            ${garantiaBadge}
           </div>
           ${logoBlock}
         </div>
@@ -251,7 +270,7 @@ export function generarHtmlProforma(datos: ProformaPdfDatos): string {
               </tr>
               <tr class="total">
                 <td class="label">Total</td>
-                <td class="value">$${formatMoney(calculo.total)}</td>
+                <td class="value">${totalLabel}</td>
               </tr>
             </tbody>
           </table>

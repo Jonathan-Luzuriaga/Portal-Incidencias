@@ -137,6 +137,7 @@ export default function ProformasPage() {
   const [descripcion, setDescripcion] = useState("");
   const [horas, setHoras] = useState<number>(0);
   const [perfil, setPerfil] = useState<PerfilDesarrollador>("SEMI_SENIOR");
+  const [esGarantia, setEsGarantia] = useState(false);
   const [cliente, setCliente] = useState("");
   const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -153,8 +154,8 @@ export default function ProformasPage() {
 
   const resultado = useMemo(() => {
     if (!Number.isFinite(horas) || horas <= 0) return null;
-    return calcularProforma(horas, perfil);
-  }, [horas, perfil]);
+    return calcularProforma(horas, perfil, esGarantia);
+  }, [horas, perfil, esGarantia]);
 
   const canGenerarPdf =
     codigoProyecto.length > 0 &&
@@ -171,9 +172,10 @@ export default function ProformasPage() {
       descripcion,
       horas,
       perfil,
+      esGarantia,
       actividades,
     }),
-    [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades]
+    [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, esGarantia, actividades]
   );
 
   useEffect(() => {
@@ -213,7 +215,7 @@ export default function ProformasPage() {
     setNotionPageUrl("");
     setPdfFilename("");
     setPdfStatus((prev) => (prev === "published" ? "idle" : prev));
-  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, actividades, cliente]);
+  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, esGarantia, actividades, cliente]);
 
   function handleNumActividadesChange(value: number) {
     const n = Number.isFinite(value) ? Math.max(0, Math.min(12, Math.round(value))) : 0;
@@ -297,6 +299,7 @@ export default function ProformasPage() {
           descripcion: descripcion.trim(),
           horas,
           perfil,
+          esGarantia,
           cliente: cliente.trim(),
           actividades: actividadesPayload,
         }),
@@ -532,6 +535,26 @@ export default function ProformasPage() {
               </div>
             </div>
 
+            <div>
+              <label htmlFor="esGarantia" className={labelClasses}>
+                ¿Es garantía?
+              </label>
+              <select
+                id="esGarantia"
+                value={esGarantia ? "si" : "no"}
+                onChange={(e) => setEsGarantia(e.target.value === "si")}
+                className={fieldClasses}
+              >
+                <option value="no">No</option>
+                <option value="si">Sí</option>
+              </select>
+              {esGarantia ? (
+                <p className="mt-1.5 text-xs text-[#787774]">
+                  El total será $0 y el PDF indicará que la cotización está cubierta por garantía.
+                </p>
+              ) : null}
+            </div>
+
             <ProformaActividadesTable
               actividades={actividades}
               horasTotales={horas}
@@ -545,6 +568,11 @@ export default function ProformasPage() {
             <SectionTitle>Resumen</SectionTitle>
             {resultado ? (
               <dl className="mt-4 space-y-3 text-sm">
+                {esGarantia ? (
+                  <div className="rounded-md border border-[#d6deef] bg-[#eef2fa] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#1d2856]">
+                    Garantía
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-[#787774]">Tarifa / hora</dt>
                   <dd className="font-medium text-[#37352f]">USD {formatUsd(resultado.tarifaAplicada)}</dd>
@@ -560,7 +588,9 @@ export default function ProformasPage() {
                 <div className="border-t border-[#e8e8e8] pt-3">
                   <div className="flex items-center justify-between gap-3">
                     <dt className="font-semibold text-[#37352f]">Total</dt>
-                    <dd className="text-base font-semibold text-[#1a73d1]">USD {formatUsd(resultado.total)}</dd>
+                    <dd className="text-base font-semibold text-[#1a73d1]">
+                      {esGarantia ? "Garantía" : `USD ${formatUsd(resultado.total)}`}
+                    </dd>
                   </div>
                 </div>
               </dl>
@@ -578,6 +608,11 @@ export default function ProformasPage() {
             <SectionTitle>Resumen</SectionTitle>
             {resultado ? (
               <dl className="mt-4 space-y-3 text-sm">
+                {esGarantia ? (
+                  <div className="rounded-md border border-[#d6deef] bg-[#eef2fa] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#1d2856]">
+                    Garantía
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-[#787774]">Tarifa / hora</dt>
                   <dd className="font-medium text-[#37352f]">USD {formatUsd(resultado.tarifaAplicada)}</dd>
@@ -593,7 +628,9 @@ export default function ProformasPage() {
                 <div className="border-t border-[#e8e8e8] pt-3">
                   <div className="flex items-center justify-between gap-3">
                     <dt className="font-semibold text-[#37352f]">Total</dt>
-                    <dd className="text-base font-semibold text-[#1a73d1]">USD {formatUsd(resultado.total)}</dd>
+                    <dd className="text-base font-semibold text-[#1a73d1]">
+                      {esGarantia ? "Garantía" : `USD ${formatUsd(resultado.total)}`}
+                    </dd>
                   </div>
                 </div>
               </dl>

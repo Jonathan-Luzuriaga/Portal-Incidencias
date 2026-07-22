@@ -90,6 +90,31 @@ export const PROFORMA_CSS = `
   font-weight: 600;
 }
 
+.proforma-garantia-badge {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border: 1.5px solid #1d2856;
+  border-radius: 4px;
+  color: #1d2856;
+  font-family: "Montserrat", Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.proforma-actividades-nota {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid #1d2856;
+  background: #f4f6fb;
+  color: #1d2856;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .proforma-logo {
   width: 150px;
   height: auto;
