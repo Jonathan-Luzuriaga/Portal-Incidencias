@@ -20,6 +20,8 @@ export interface ProformaPreviewDatos {
   horas: number;
   perfil: PerfilDesarrollador;
   actividades: ProformaActividadInput[];
+  /** Si true, la proforma es por garantía (total $0). */
+  esGarantia?: boolean;
 }
 
 let actividadSeq = 0;

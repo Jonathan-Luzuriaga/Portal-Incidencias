@@ -37,6 +37,15 @@ function parseHoras(raw: unknown): number | null {
   return Math.round(n);
 }
 
+function parseEsGarantia(raw: unknown): boolean {
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw === 1;
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return value === "1" || value === "true" || value === "si" || value === "sí" || value === "yes";
+}
+
 function parseActividades(raw: unknown): ProformaActividadInput[] {
   if (!Array.isArray(raw)) return [];
   const result: ProformaActividadInput[] = [];
@@ -79,6 +88,7 @@ export async function POST(request: Request): Promise<Response> {
   const horas = parseHoras(body.horas);
   const perfil = parsePerfil(body.perfil);
   const cliente = String(body.cliente ?? "").trim();
+  const esGarantia = parseEsGarantia(body.esGarantia);
   const codigoProyecto = formatCodigoProyecto(codigoProyectoRaw);
 
   if (!codigoProyecto) {
@@ -122,13 +132,15 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    const actividades = parseActividades(body.actividades);
     const html = generarHtmlProforma({
       codigoProyecto,
       codigoEstimacion: codigoEstimacionRaw,
       descripcion,
       horas,
       perfil,
-      actividades: parseActividades(body.actividades),
+      actividades,
+      esGarantia,
       logoSrc: resolveLogoSrc(),
     });
     const executablePath = await warmChromiumExecutable();
@@ -140,7 +152,8 @@ export async function POST(request: Request): Promise<Response> {
       descripcion,
       horas,
       perfil,
-      actividades: parseActividades(body.actividades),
+      actividades,
+      esGarantia,
       pdf,
       cliente,
     });
