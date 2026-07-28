@@ -1,10 +1,13 @@
-import type { PerfilDesarrollador } from "./proforma-calc";
-import { TARIFAS_MANTICORE } from "./proforma-calc";
+import {
+  parseRolEncargado,
+  ROL_DEFAULT,
+  ROLES_ENCARGADO,
+  tarifaDefault,
+  type RolEncargado,
+} from "./proforma-calc";
 import { generarActividadesFallback, redactarDescripcionLocal } from "./proforma-redactar";
 import type { ProformaActividadInput } from "./proforma-types";
 import { ServiceError } from "./types";
-
-const PERFILES: PerfilDesarrollador[] = ["SENIOR", "SEMI_SENIOR", "JUNIOR"];
 
 const SYSTEM_PROMPT = `Eres un redactor técnico-comercial de Manticore Labs. Recibes una idea o requerimiento en bruto del cliente.
 
@@ -12,9 +15,13 @@ Devuelve ÚNICAMENTE un JSON válido:
 {
   "descripcion": "alcance redactado profesionalmente para la línea principal (máx. 500 caracteres)",
   "horasEstimadas": número entero positivo,
-  "perfilSugerido": "SENIOR" | "SEMI_SENIOR" | "JUNIOR",
   "actividades": [
-    { "actividad": "nombre corto", "descripcion": "detalle de la tarea", "horas": número entero }
+    {
+      "actividad": "nombre corto",
+      "descripcion": "detalle de la tarea",
+      "horas": número entero,
+      "rol": "SENIOR" | "SEMI_SENIOR" | "JUNIOR" | "ARQUITECTO" | "DEVOPS"
+    }
   ]
 }
 
@@ -24,11 +31,16 @@ Reglas descripcion:
 
 Reglas actividades:
 - Genera el número de actividades indicado por el usuario (o 4 si no se indica).
-- Cada actividad: nombre breve + descripción clara + horas enteras > 0.
+- Cada actividad: nombre breve + descripción clara + horas enteras > 0 + rol.
 - La SUMA de horas de todas las actividades DEBE ser exactamente igual a horasEstimadas.
 - Cubre análisis, desarrollo, pruebas y cierre según el alcance.
 
-perfilSugerido: SENIOR (integraciones/arquitectura), SEMI_SENIOR (desarrollo estándar), JUNIOR (ajustes menores).`;
+Roles (Rol/Encargado):
+- ARQUITECTO: diseño de solución, arquitectura, decisiones estructurales.
+- DEVOPS: CI/CD, infraestructura, despliegues, pipelines.
+- SENIOR: integraciones, módulos críticos, desarrollo avanzado.
+- SEMI_SENIOR: desarrollo estándar de funcionalidades.
+- JUNIOR: ajustes menores, UI simple, correcciones, documentación.`;
 
 interface DeepSeekResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -37,7 +49,6 @@ interface DeepSeekResponse {
 export interface ProformaEstructurada {
   descripcion: string;
   horasEstimadas: number;
-  perfilSugerido: PerfilDesarrollador;
   actividades: ProformaActividadInput[];
   redactadoPorIa: boolean;
 }
@@ -50,13 +61,6 @@ function parseDeepSeekJson(raw: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-function pickPerfil(value: unknown): PerfilDesarrollador {
-  if (typeof value === "string" && value in TARIFAS_MANTICORE) {
-    return value as PerfilDesarrollador;
-  }
-  return "SEMI_SENIOR";
 }
 
 function sanitizeHoras(value: unknown): number {
@@ -72,14 +76,23 @@ function inferHorasFromText(raw: string): number {
   return Number.isFinite(n) && n > 0 ? n : 8;
 }
 
-function inferPerfilFromText(raw: string): PerfilDesarrollador {
-  const lower = raw.toLowerCase();
-  if (/(arquitectura|integraci[oó]n|sap|cr[ií]tico|complej)/i.test(lower)) return "SENIOR";
-  if (/(ajuste|menor|correcci[oó]n|texto|redacci[oó]n|label|bot[oó]n)/i.test(lower)) return "JUNIOR";
-  return "SEMI_SENIOR";
+function inferRolFromActividad(actividad: string, descripcion: string): RolEncargado {
+  const text = `${actividad} ${descripcion}`.toLowerCase();
+  if (/(arquitect|diseño de soluci[oó]n|diseño t[eé]cnico)/i.test(text)) return "ARQUITECTO";
+  if (/(devops|ci\/?cd|pipeline|infra|despliegue|deploy)/i.test(text)) return "DEVOPS";
+  if (/(integraci[oó]n|sap|cr[ií]tico|complej|senior)/i.test(text)) return "SENIOR";
+  if (/(ajuste|menor|correcci[oó]n|texto|redacci[oó]n|label|bot[oó]n|documentaci[oó]n|prueba)/i.test(text)) {
+    return "JUNIOR";
+  }
+  return ROL_DEFAULT;
 }
 
-function sanitizeActividades(raw: unknown, horasTotales: number, descripcion: string, cantidad?: number): ProformaActividadInput[] {
+function sanitizeActividades(
+  raw: unknown,
+  horasTotales: number,
+  descripcion: string,
+  cantidad?: number
+): ProformaActividadInput[] {
   if (!Array.isArray(raw) || raw.length === 0) {
     return generarActividadesFallback(descripcion, horasTotales, cantidad);
   }
@@ -87,11 +100,19 @@ function sanitizeActividades(raw: unknown, horasTotales: number, descripcion: st
   const items: ProformaActividadInput[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const actividad = String((item as ProformaActividadInput).actividad ?? "").trim().slice(0, 120);
-    const desc = String((item as ProformaActividadInput).descripcion ?? "").trim().slice(0, 300);
-    const horas = sanitizeHoras((item as ProformaActividadInput).horas);
+    const row = item as Partial<ProformaActividadInput> & { rol?: unknown };
+    const actividad = String(row.actividad ?? "").trim().slice(0, 120);
+    const desc = String(row.descripcion ?? "").trim().slice(0, 300);
+    const horas = sanitizeHoras(row.horas);
     if (!actividad) continue;
-    items.push({ actividad, descripcion: desc || actividad, horas });
+    const rol = parseRolEncargado(row.rol, inferRolFromActividad(actividad, desc || actividad));
+    items.push({
+      actividad,
+      descripcion: desc || actividad,
+      horas,
+      rol,
+      valorHora: tarifaDefault(rol),
+    });
     if (items.length >= 12) break;
   }
 
@@ -125,7 +146,6 @@ function sanitizeParsed(
   return {
     descripcion,
     horasEstimadas,
-    perfilSugerido: pickPerfil(parsed.perfilSugerido),
     actividades: sanitizeActividades(parsed.actividades, horasEstimadas, descripcion, cantidadActividades),
     redactadoPorIa: true,
   };
@@ -137,7 +157,6 @@ function buildFallback(raw: string, cantidadActividades?: number): ProformaEstru
   return {
     descripcion,
     horasEstimadas,
-    perfilSugerido: inferPerfilFromText(raw),
     actividades: generarActividadesFallback(descripcion, horasEstimadas, cantidadActividades),
     redactadoPorIa: false,
   };
@@ -188,7 +207,7 @@ export async function estructurarProformaDesdeTexto(
           {
             role: "user",
             content: [
-              `Perfiles permitidos: ${PERFILES.join(", ")}`,
+              `Roles permitidos: ${ROLES_ENCARGADO.join(", ")}`,
               cantidadHint,
               "",
               "Requerimiento en bruto:",
@@ -220,7 +239,6 @@ export async function estructurarProformaDesdeTexto(
       return {
         ...fallback,
         horasEstimadas: result.horasEstimadas,
-        perfilSugerido: result.perfilSugerido,
         actividades: result.actividades,
       };
     }

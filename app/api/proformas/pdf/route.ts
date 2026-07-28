@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { TARIFAS_MANTICORE, type PerfilDesarrollador } from "@/lib/proforma-calc";
+import {
+  parseRolEncargado,
+  tarifaDefault,
+  type RolEncargado,
+} from "@/lib/proforma-calc";
 import { formatCodigoProyecto } from "@/lib/proforma-codigos";
 import { generarHtmlProforma } from "@/lib/proforma-pdf-template";
 import { loadCorporateAssets } from "@/lib/propuesta-pdf/assets";
@@ -10,14 +14,11 @@ import { ServiceError } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const PERFILES = Object.keys(TARIFAS_MANTICORE) as PerfilDesarrollador[];
-
 export interface ProformaPdfBody {
   codigoProyecto: string;
   codigoEstimacion: string;
   descripcion: string;
   horas: number;
-  perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
   esGarantia?: boolean;
 }
@@ -26,15 +27,6 @@ function buildContentDisposition(codigoProyecto: string): string {
   const utf8Filename = `${codigoProyecto}.pdf`;
   const asciiFilename = utf8Filename.replace(/[^\x20-\x7E]/g, "_");
   return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(utf8Filename)}`;
-}
-
-function parsePerfil(raw: unknown): PerfilDesarrollador | null {
-  const value = String(raw ?? "").trim().toUpperCase();
-  if (!value) return null;
-  if (PERFILES.includes(value as PerfilDesarrollador)) {
-    return value as PerfilDesarrollador;
-  }
-  return null;
 }
 
 function parseHoras(raw: unknown): number | null {
@@ -52,20 +44,30 @@ function parseEsGarantia(raw: unknown): boolean {
   return value === "1" || value === "true" || value === "si" || value === "sí" || value === "yes";
 }
 
+function parseValorHora(raw: unknown, rol: RolEncargado): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return tarifaDefault(rol);
+}
+
 function parseActividades(raw: unknown): ProformaActividadInput[] {
   if (!Array.isArray(raw)) return [];
   const result: ProformaActividadInput[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const actividad = String((item as ProformaActividadInput).actividad ?? "").trim();
-    const descripcion = String((item as ProformaActividadInput).descripcion ?? "").trim();
-    const horasRaw = (item as ProformaActividadInput).horas;
+    const row = item as Partial<ProformaActividadInput>;
+    const actividad = String(row.actividad ?? "").trim();
+    const descripcion = String(row.descripcion ?? "").trim();
+    const horasRaw = row.horas;
     const horas = typeof horasRaw === "number" ? horasRaw : Number(horasRaw);
     if (!actividad && !descripcion) continue;
+    const rol = parseRolEncargado(row.rol);
     result.push({
       actividad,
       descripcion,
       horas: Number.isFinite(horas) && horas > 0 ? Math.round(horas) : 0,
+      rol,
+      valorHora: parseValorHora(row.valorHora, rol),
     });
   }
   return result;
@@ -81,7 +83,6 @@ function validatePdfInput(body: {
   codigoEstimacion?: unknown;
   descripcion?: unknown;
   horas?: unknown;
-  perfil?: unknown;
   actividades?: unknown;
   esGarantia?: unknown;
 }): {
@@ -92,8 +93,8 @@ function validatePdfInput(body: {
   const codigoEstimacionRaw = String(body.codigoEstimacion ?? "").trim();
   const descripcion = String(body.descripcion ?? "").trim();
   const horas = parseHoras(body.horas);
-  const perfil = parsePerfil(body.perfil);
   const esGarantia = parseEsGarantia(body.esGarantia);
+  const actividades = parseActividades(body.actividades);
 
   const codigoProyecto = formatCodigoProyecto(codigoProyectoRaw);
   if (!codigoProyecto) {
@@ -108,8 +109,8 @@ function validatePdfInput(body: {
   if (horas === null) {
     return { ok: false, error: "horas debe ser un número entero mayor a 0." };
   }
-  if (!perfil) {
-    return { ok: false, error: `perfil debe ser uno de: ${PERFILES.join(", ")}.` };
+  if (actividades.length === 0) {
+    return { ok: false, error: "Debes incluir al menos una actividad con Rol/Encargado." };
   }
 
   return {
@@ -119,8 +120,7 @@ function validatePdfInput(body: {
       codigoEstimacion: codigoEstimacionRaw,
       descripcion,
       horas,
-      perfil,
-      actividades: parseActividades(body.actividades),
+      actividades,
       esGarantia,
     },
   };
@@ -187,7 +187,6 @@ export async function GET(request: Request): Promise<Response> {
     codigoEstimacion: searchParams.get("codigoEstimacion") ?? "",
     descripcion: searchParams.get("descripcion") ?? "",
     horas: searchParams.get("horas") ?? "",
-    perfil: searchParams.get("perfil") ?? "",
     actividades: parseActividadesFromQuery(searchParams.get("actividades")),
     esGarantia: searchParams.get("esGarantia") ?? "",
   });

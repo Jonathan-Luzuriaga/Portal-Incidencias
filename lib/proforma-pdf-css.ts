@@ -41,6 +41,16 @@ export const PROFORMA_CSS = `
   vertical-align: top;
 }
 
+.page-proforma .data-table-actividades td.center-cell,
+.page-proforma .data-table-actividades th:nth-child(4),
+.page-proforma .data-table-actividades td:nth-child(4),
+.page-proforma .data-table-actividades th:nth-child(5),
+.page-proforma .data-table-actividades td:nth-child(5) {
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
 .page-proforma .cell-description {
   text-align: left;
   hyphens: auto;
@@ -292,26 +302,60 @@ export const PROFORMA_CSS = `
 }
 
 .data-table-actividades {
+  width: 100%;
   margin-top: 0;
   margin-bottom: 8px;
+  table-layout: fixed;
 }
 
 .data-table-actividades th:nth-child(1),
 .data-table-actividades td:nth-child(1) {
-  width: 22%;
+  width: 18%;
   text-align: left;
 }
 
 .data-table-actividades th:nth-child(2),
 .data-table-actividades td:nth-child(2) {
-  width: 58%;
+  width: 36%;
   text-align: left;
 }
 
 .data-table-actividades th:nth-child(3),
 .data-table-actividades td:nth-child(3) {
   width: 20%;
+  text-align: left;
+}
+
+.data-table-actividades th:nth-child(4),
+.data-table-actividades td:nth-child(4) {
+  width: 14%;
   text-align: center;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-actividades th:nth-child(5),
+.data-table-actividades td:nth-child(5) {
+  width: 12%;
+  text-align: center;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-actividades td.center-cell {
+  text-align: center;
+}
+
+.data-table-actividades td.cell-numeric {
+  text-align: center;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table-actividades tr.actividades-total td {

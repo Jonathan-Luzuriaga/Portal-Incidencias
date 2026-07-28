@@ -8,7 +8,7 @@ import { RequiredLegend, RequiredMark } from "@/components/RequiredMark";
 import type { ProformaOpcionesResponse } from "@/app/api/proformas/opciones/route";
 import type { ProformaPublishResponse } from "@/app/api/proformas/pdf/publish/route";
 import { isEmbeddedInFrame } from "@/lib/embed-download";
-import { calcularProforma, type PerfilDesarrollador } from "@/lib/proforma-calc";
+import { calcularProformaDesdeActividades } from "@/lib/proforma-calc";
 import {
   formatCodigoEstimacion,
   formatCodigoProyecto,
@@ -17,6 +17,7 @@ import {
   nuevaActividad,
   validarHorasActividades,
   type ProformaActividad,
+  type ProformaActividadInput,
 } from "@/lib/proforma-types";
 
 type PdfStatus = "idle" | "loading" | "published" | "error";
@@ -28,12 +29,6 @@ const fieldClasses =
   "disabled:cursor-not-allowed disabled:opacity-60";
 
 const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
-
-const PERFIL_OPTIONS: { value: PerfilDesarrollador; label: string }[] = [
-  { value: "SENIOR", label: "Senior" },
-  { value: "SEMI_SENIOR", label: "Semi-Senior" },
-  { value: "JUNIOR", label: "Junior" },
-];
 
 function formatUsd(amount: number): string {
   return amount.toLocaleString("en-US", {
@@ -99,14 +94,14 @@ function PrefixedInput({
   );
 }
 
-function mapActividadesFromApi(
-  items: { actividad: string; descripcion: string; horas: number }[]
-): ProformaActividad[] {
+function mapActividadesFromApi(items: ProformaActividadInput[]): ProformaActividad[] {
   return items.map((item) =>
     nuevaActividad({
       actividad: item.actividad,
       descripcion: item.descripcion,
       horas: item.horas,
+      rol: item.rol,
+      valorHora: item.valorHora,
     })
   );
 }
@@ -136,7 +131,6 @@ export default function ProformasPage() {
   const [numeroEstimacion, setNumeroEstimacion] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [horas, setHoras] = useState<number>(0);
-  const [perfil, setPerfil] = useState<PerfilDesarrollador>("SEMI_SENIOR");
   const [esGarantia, setEsGarantia] = useState(false);
   const [cliente, setCliente] = useState("");
   const [clientOptions, setClientOptions] = useState<string[]>([]);
@@ -154,8 +148,10 @@ export default function ProformasPage() {
 
   const resultado = useMemo(() => {
     if (!Number.isFinite(horas) || horas <= 0) return null;
-    return calcularProforma(horas, perfil, esGarantia);
-  }, [horas, perfil, esGarantia]);
+    const conContenido = actividades.filter((a) => a.actividad.trim() || a.descripcion.trim());
+    if (conContenido.length === 0) return null;
+    return calcularProformaDesdeActividades(conContenido, esGarantia);
+  }, [horas, esGarantia, actividades]);
 
   const canGenerarPdf =
     codigoProyecto.length > 0 &&
@@ -171,11 +167,10 @@ export default function ProformasPage() {
       codigoEstimacion: numeroEstimacion,
       descripcion,
       horas,
-      perfil,
       esGarantia,
       actividades,
     }),
-    [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, esGarantia, actividades]
+    [numeroProyecto, numeroEstimacion, descripcion, horas, esGarantia, actividades]
   );
 
   useEffect(() => {
@@ -215,7 +210,7 @@ export default function ProformasPage() {
     setNotionPageUrl("");
     setPdfFilename("");
     setPdfStatus((prev) => (prev === "published" ? "idle" : prev));
-  }, [numeroProyecto, numeroEstimacion, descripcion, horas, perfil, esGarantia, actividades, cliente]);
+  }, [numeroProyecto, numeroEstimacion, descripcion, horas, esGarantia, actividades, cliente]);
 
   function handleNumActividadesChange(value: number) {
     const n = Number.isFinite(value) ? Math.max(0, Math.min(12, Math.round(value))) : 0;
@@ -256,7 +251,6 @@ export default function ProformasPage() {
 
       setDescripcion(data.descripcion);
       setHoras(data.horasEstimadas);
-      setPerfil(data.perfilSugerido);
       setActividades(mapActividadesFromApi(data.actividades));
       if (data.actividades.length > 0) {
         setNumActividades(data.actividades.length);
@@ -283,10 +277,12 @@ export default function ProformasPage() {
 
     const actividadesPayload = actividades
       .filter((a) => a.actividad.trim() || a.descripcion.trim())
-      .map(({ actividad, descripcion: desc, horas: h }) => ({
+      .map(({ actividad, descripcion: desc, horas: h, rol, valorHora }) => ({
         actividad: actividad.trim(),
         descripcion: desc.trim(),
         horas: h,
+        rol,
+        valorHora,
       }));
 
     try {
@@ -298,7 +294,6 @@ export default function ProformasPage() {
           codigoEstimacion: numeroEstimacion,
           descripcion: descripcion.trim(),
           horas,
-          perfil,
           esGarantia,
           cliente: cliente.trim(),
           actividades: actividadesPayload,
@@ -494,45 +489,24 @@ export default function ProformasPage() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="horas" className={labelClasses}>
-                  Horas totales
-                  <RequiredMark />
-                </label>
-                <input
-                  id="horas"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={horas > 0 ? horas : ""}
-                  onChange={(e) => {
-                    const parsed = Number(e.target.value);
-                    setHoras(Number.isFinite(parsed) ? parsed : 0);
-                  }}
-                  placeholder="0"
-                  className={fieldClasses}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="perfil" className={labelClasses}>
-                  Perfil
-                  <RequiredMark />
-                </label>
-                <select
-                  id="perfil"
-                  value={perfil}
-                  onChange={(e) => setPerfil(e.target.value as PerfilDesarrollador)}
-                  className={fieldClasses}
-                >
-                  {PERFIL_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label htmlFor="horas" className={labelClasses}>
+                Horas totales
+                <RequiredMark />
+              </label>
+              <input
+                id="horas"
+                type="number"
+                min={1}
+                step={1}
+                value={horas > 0 ? horas : ""}
+                onChange={(e) => {
+                  const parsed = Number(e.target.value);
+                  setHoras(Number.isFinite(parsed) ? parsed : 0);
+                }}
+                placeholder="0"
+                className={fieldClasses}
+              />
             </div>
 
             <div>
@@ -574,7 +548,7 @@ export default function ProformasPage() {
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-[#787774]">Tarifa / hora</dt>
+                  <dt className="text-[#787774]">Tarifa efectiva / h</dt>
                   <dd className="font-medium text-[#37352f]">USD {formatUsd(resultado.tarifaAplicada)}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
@@ -596,7 +570,7 @@ export default function ProformasPage() {
               </dl>
             ) : (
               <p className="mt-4 text-sm text-[#9b9a97]">
-                Ingresa las horas y selecciona un perfil para ver el cálculo.
+                Ingresa horas y actividades con Rol/Encargado para ver el cálculo.
               </p>
             )}
           </aside>
@@ -614,7 +588,7 @@ export default function ProformasPage() {
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-[#787774]">Tarifa / hora</dt>
+                  <dt className="text-[#787774]">Tarifa efectiva / h</dt>
                   <dd className="font-medium text-[#37352f]">USD {formatUsd(resultado.tarifaAplicada)}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
@@ -636,7 +610,7 @@ export default function ProformasPage() {
               </dl>
             ) : (
               <p className="mt-4 text-sm text-[#9b9a97]">
-                Ingresa las horas y selecciona un perfil para ver el cálculo.
+                Ingresa horas y actividades con Rol/Encargado para ver el cálculo.
               </p>
             )}
           </div>

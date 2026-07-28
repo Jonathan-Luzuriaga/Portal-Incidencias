@@ -1,6 +1,9 @@
 import type { BlockObjectRequest, CreatePageResponse } from "@notionhq/client/build/src/api-endpoints";
 import { todayIsoDate } from "./dates";
-import { calcularProforma, type PerfilDesarrollador } from "./proforma-calc";
+import {
+  calcularProformaDesdeActividades,
+  ROL_ENCARGADO_LABELS,
+} from "./proforma-calc";
 import { formatCodigoEstimacion } from "./proforma-codigos";
 import { getProformaNotionConfig, notionPageUrl } from "./proforma-notion-config";
 import type { ProformaActividadInput } from "./proforma-types";
@@ -31,7 +34,6 @@ export interface CreateProformaPdfPageArgs {
   codigoEstimacion: string;
   descripcion: string;
   horas: number;
-  perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
   esGarantia?: boolean;
   pdf: Buffer | Uint8Array;
@@ -46,11 +48,15 @@ export interface CreateProformaPdfPageResult {
   fileUploadId: string;
 }
 
-function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnType<typeof calcularProforma>): string {
+function buildContextMarkdown(
+  args: CreateProformaPdfPageArgs,
+  totales: ReturnType<typeof calcularProformaDesdeActividades>
+): string {
   const codigoEstimacion = formatCodigoEstimacion(args.codigoEstimacion) || args.codigoEstimacion;
   const actividades = (args.actividades ?? []).filter((a) => a.actividad.trim() || a.descripcion.trim());
   const esGarantia = Boolean(args.esGarantia);
   const totalLabel = esGarantia ? "Garantía" : `USD ${totales.total.toFixed(2)}`;
+  const rolesUsados = [...new Set(actividades.map((a) => ROL_ENCARGADO_LABELS[a.rol] ?? a.rol))];
 
   const lines: string[] = [
     "## Contexto de la proforma",
@@ -60,8 +66,9 @@ function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnTy
     `- **Proyecto:** ${args.codigoProyecto}`,
     `- **Estimación:** ${codigoEstimacion}`,
     `- **Garantía:** ${esGarantia ? "Sí" : "No"}`,
-    `- **Perfil:** ${args.perfil}`,
+    `- **Roles:** ${rolesUsados.length > 0 ? rolesUsados.join(", ") : "—"}`,
     `- **Horas:** ${args.horas}`,
+    `- **Tarifa efectiva / h:** USD ${totales.tarifaAplicada.toFixed(2)}`,
     `- **Subtotal:** USD ${totales.subtotal.toFixed(2)}`,
     `- **IVA (15%):** USD ${totales.iva.toFixed(2)}`,
     `- **Total:** ${totalLabel}`,
@@ -76,7 +83,10 @@ function buildContextMarkdown(args: CreateProformaPdfPageArgs, totales: ReturnTy
     for (const a of actividades) {
       const titulo = a.actividad.trim() || "Actividad";
       const desc = a.descripcion.trim();
-      lines.push(`- **${titulo}** (${a.horas}h)${desc ? ` — ${desc}` : ""}`);
+      const rol = ROL_ENCARGADO_LABELS[a.rol] ?? a.rol;
+      lines.push(
+        `- **${titulo}** (${a.horas}h · ${rol} · USD ${a.valorHora.toFixed(2)}/h)${desc ? ` — ${desc}` : ""}`
+      );
     }
   }
 
@@ -123,7 +133,8 @@ export async function createProformaPdfPage(
   const codigoEstimacion = formatCodigoEstimacion(args.codigoEstimacion) || args.codigoEstimacion.trim();
   const filename = `${args.codigoProyecto}.pdf`;
   const esGarantia = Boolean(args.esGarantia);
-  const totales = calcularProforma(args.horas, args.perfil, esGarantia);
+  const actividades = (args.actividades ?? []).filter((a) => a.actividad.trim() || a.descripcion.trim());
+  const totales = calcularProformaDesdeActividades(actividades, esGarantia);
   const cliente = (args.cliente ?? "").trim() || proformaCfg.clientDefault;
 
   const fileUploadId = await uploadBufferToNotion(args.pdf, filename, "application/pdf");
@@ -131,9 +142,10 @@ export async function createProformaPdfPage(
 
   const title = `Proforma${esGarantia ? " (Garantía)" : ""} — ${args.codigoProyecto} / ${codigoEstimacion}`;
   const totalLabel = esGarantia ? "Garantía" : `USD ${totales.total.toFixed(2)}`;
+  const rolesUsados = [...new Set(actividades.map((a) => ROL_ENCARGADO_LABELS[a.rol] ?? a.rol))];
   const shortDescription = `${args.descripcion.trim().slice(0, 180)}${
     args.descripcion.trim().length > 180 ? "…" : ""
-  } · ${args.horas}h · ${args.perfil} · ${totalLabel}`;
+  } · ${args.horas}h · ${rolesUsados.join(", ") || "sin rol"} · ${totalLabel}`;
 
   const bodyBlocks: BlockObjectRequest[] = [
     ...markdownToNotionBlocks(buildContextMarkdown(args, totales)),

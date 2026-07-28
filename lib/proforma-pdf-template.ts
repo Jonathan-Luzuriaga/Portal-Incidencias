@@ -2,9 +2,8 @@ import { CORPORATE_CSS } from "./propuesta-pdf/corporate-css";
 import { formatMoney } from "./propuesta-pdf/calc";
 import { PROFORMA_CSS } from "./proforma-pdf-css";
 import {
-  calcularProforma,
-  TARIFAS_MANTICORE,
-  type PerfilDesarrollador,
+  calcularProformaDesdeActividades,
+  ROL_ENCARGADO_LABELS,
 } from "./proforma-calc";
 import { formatCodigoEstimacion, formatCodigoProyecto } from "./proforma-codigos";
 import type { ProformaActividadInput } from "./proforma-types";
@@ -22,7 +21,6 @@ export interface ProformaPdfDatos {
   codigoEstimacion: string;
   descripcion: string;
   horas: number;
-  perfil: PerfilDesarrollador;
   actividades?: ProformaActividadInput[];
   /** Si true, montos a $0 y Total muestra "Garantía". */
   esGarantia?: boolean;
@@ -114,7 +112,9 @@ function renderActividadesTable(
             <tr>
               <td class="cell-wrap">${esc(a.actividad)}</td>
               <td class="cell-wrap cell-description">${esc(a.descripcion)}</td>
-              <td class="center-cell">${a.horas}</td>
+              <td class="cell-wrap">${esc(ROL_ENCARGADO_LABELS[a.rol] ?? a.rol)}</td>
+              <td class="center-cell cell-numeric">${formatMoney(a.valorHora)}</td>
+              <td class="center-cell cell-numeric">${a.horas}</td>
             </tr>`
     )
     .join("\n");
@@ -131,13 +131,15 @@ function renderActividadesTable(
             <tr>
               <th>Actividad</th>
               <th>Descripción</th>
+              <th>Rol/Encargado</th>
+              <th>Valor/hora</th>
               <th>Horas</th>
             </tr>
           </thead>
           <tbody>
             ${rows}
             <tr class="actividades-total">
-              <td colspan="2"><strong>Horas estimadas</strong></td>
+              <td colspan="4"><strong>Horas estimadas</strong></td>
               <td class="center-cell"><strong>${totalHoras}</strong></td>
             </tr>
           </tbody>
@@ -167,8 +169,12 @@ function renderPageFooter(pageNumber: number, email: string): string {
  */
 export function generarHtmlProforma(datos: ProformaPdfDatos): string {
   const esGarantia = Boolean(datos.esGarantia);
-  const calculo = calcularProforma(datos.horas, datos.perfil, esGarantia);
-  const tarifa = esGarantia ? 0 : TARIFAS_MANTICORE[datos.perfil];
+  const actividades = datos.actividades ?? [];
+  const calculo = calcularProformaDesdeActividades(
+    actividades.filter((a) => a.actividad.trim() || a.descripcion.trim()),
+    esGarantia
+  );
+  const tarifa = esGarantia ? 0 : calculo.tarifaAplicada;
   const fecha = datos.fechaEstimacion ?? new Date();
   const validezDias = datos.validezDias ?? VALIDEZ_DIAS_DEFAULT;
   const fechaVencimiento = addDays(fecha, validezDias);
@@ -177,7 +183,7 @@ export function generarHtmlProforma(datos: ProformaPdfDatos): string {
   const cliente = datos.cliente ?? CLIENTE_BAGO_DEFAULT;
   const articulo = buildArticuloDescripcion(codigoProyecto, datos.descripcion);
   const logo = datos.logoSrc?.trim() ?? "";
-  const actividadesBlock = renderActividadesBlock(datos.actividades ?? [], esGarantia);
+  const actividadesBlock = renderActividadesBlock(actividades, esGarantia);
   const hasSecondPage = Boolean(actividadesBlock);
   const totalLabel = esGarantia ? "Garantía" : `$${formatMoney(calculo.total)}`;
   const garantiaBadge = esGarantia
