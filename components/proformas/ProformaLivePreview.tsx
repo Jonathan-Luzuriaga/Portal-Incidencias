@@ -75,7 +75,6 @@ export function ProformaLivePreview({ datos }: ProformaLivePreviewProps) {
       codigoEstimacion,
       descripcion: datos.descripcion.trim(),
       horas: datos.horas,
-      perfil: datos.perfil,
       esGarantia: Boolean(datos.esGarantia),
       actividades: datos.actividades.filter((a) => a.actividad.trim() || a.descripcion.trim()),
       logoSrc: LOGO_PUBLIC,

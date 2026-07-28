@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { estructurarProformaDesdeTexto } from "@/lib/deepseek-proforma";
-import type { ProformaEstructurada } from "@/lib/deepseek-proforma";
 import type { ProformaActividadInput } from "@/lib/proforma-types";
 import { ServiceError } from "@/lib/types";
 
@@ -10,7 +9,6 @@ export interface ProformaEstructurarSuccess {
   ok: true;
   descripcion: string;
   horasEstimadas: number;
-  perfilSugerido: ProformaEstructurada["perfilSugerido"];
   actividades: ProformaActividadInput[];
   redactadoPorIa: boolean;
 }
@@ -54,7 +52,6 @@ export async function POST(request: Request): Promise<NextResponse<ProformaEstru
       ok: true,
       descripcion: resultado.descripcion,
       horasEstimadas: resultado.horasEstimadas,
-      perfilSugerido: resultado.perfilSugerido,
       actividades: resultado.actividades,
       redactadoPorIa: resultado.redactadoPorIa,
     });

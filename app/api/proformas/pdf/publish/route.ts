@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { TARIFAS_MANTICORE, type PerfilDesarrollador } from "@/lib/proforma-calc";
+import {
+  parseRolEncargado,
+  tarifaDefault,
+  type RolEncargado,
+} from "@/lib/proforma-calc";
 import { formatCodigoProyecto } from "@/lib/proforma-codigos";
 import { createProformaPdfPage } from "@/lib/notion-proforma-publish";
 import { generarHtmlProforma } from "@/lib/proforma-pdf-template";
@@ -11,8 +15,6 @@ import { ServiceError } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const PERFILES = Object.keys(TARIFAS_MANTICORE) as PerfilDesarrollador[];
-
 export type ProformaPublishResponse =
   | {
       ok: true;
@@ -21,15 +23,6 @@ export type ProformaPublishResponse =
       filename: string;
     }
   | { ok: false; error: string };
-
-function parsePerfil(raw: unknown): PerfilDesarrollador | null {
-  const value = String(raw ?? "").trim().toUpperCase();
-  if (!value) return null;
-  if (PERFILES.includes(value as PerfilDesarrollador)) {
-    return value as PerfilDesarrollador;
-  }
-  return null;
-}
 
 function parseHoras(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : Number(raw);
@@ -46,20 +39,30 @@ function parseEsGarantia(raw: unknown): boolean {
   return value === "1" || value === "true" || value === "si" || value === "sí" || value === "yes";
 }
 
+function parseValorHora(raw: unknown, rol: RolEncargado): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return tarifaDefault(rol);
+}
+
 function parseActividades(raw: unknown): ProformaActividadInput[] {
   if (!Array.isArray(raw)) return [];
   const result: ProformaActividadInput[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const actividad = String((item as ProformaActividadInput).actividad ?? "").trim();
-    const descripcion = String((item as ProformaActividadInput).descripcion ?? "").trim();
-    const horasRaw = (item as ProformaActividadInput).horas;
+    const row = item as Partial<ProformaActividadInput>;
+    const actividad = String(row.actividad ?? "").trim();
+    const descripcion = String(row.descripcion ?? "").trim();
+    const horasRaw = row.horas;
     const horas = typeof horasRaw === "number" ? horasRaw : Number(horasRaw);
     if (!actividad && !descripcion) continue;
+    const rol = parseRolEncargado(row.rol);
     result.push({
       actividad,
       descripcion,
       horas: Number.isFinite(horas) && horas > 0 ? Math.round(horas) : 0,
+      rol,
+      valorHora: parseValorHora(row.valorHora, rol),
     });
   }
   return result;
@@ -86,10 +89,10 @@ export async function POST(request: Request): Promise<Response> {
   const codigoEstimacionRaw = String(body.codigoEstimacion ?? "").trim();
   const descripcion = String(body.descripcion ?? "").trim();
   const horas = parseHoras(body.horas);
-  const perfil = parsePerfil(body.perfil);
   const cliente = String(body.cliente ?? "").trim();
   const esGarantia = parseEsGarantia(body.esGarantia);
   const codigoProyecto = formatCodigoProyecto(codigoProyectoRaw);
+  const actividades = parseActividades(body.actividades);
 
   if (!codigoProyecto) {
     return NextResponse.json(
@@ -121,24 +124,22 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400 }
     );
   }
-  if (!perfil) {
+  if (actividades.length === 0) {
     return NextResponse.json(
       {
         ok: false,
-        error: `perfil debe ser uno de: ${PERFILES.join(", ")}.`,
+        error: "Debes incluir al menos una actividad con Rol/Encargado.",
       } satisfies ProformaPublishResponse,
       { status: 400 }
     );
   }
 
   try {
-    const actividades = parseActividades(body.actividades);
     const html = generarHtmlProforma({
       codigoProyecto,
       codigoEstimacion: codigoEstimacionRaw,
       descripcion,
       horas,
-      perfil,
       actividades,
       esGarantia,
       logoSrc: resolveLogoSrc(),
@@ -151,7 +152,6 @@ export async function POST(request: Request): Promise<Response> {
       codigoEstimacion: codigoEstimacionRaw,
       descripcion,
       horas,
-      perfil,
       actividades,
       esGarantia,
       pdf,

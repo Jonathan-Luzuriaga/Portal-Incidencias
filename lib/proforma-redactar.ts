@@ -1,4 +1,18 @@
+import { ROL_DEFAULT, tarifaDefault, type RolEncargado } from "./proforma-calc";
 import type { ProformaActividadInput } from "./proforma-types";
+
+function actividadConRol(
+  partial: Omit<ProformaActividadInput, "rol" | "valorHora"> & { rol?: RolEncargado }
+): ProformaActividadInput {
+  const rol = partial.rol ?? ROL_DEFAULT;
+  return {
+    actividad: partial.actividad,
+    descripcion: partial.descripcion,
+    horas: partial.horas,
+    rol,
+    valorHora: tarifaDefault(rol),
+  };
+}
 
 const PALABRAS_CANONICAS = [
   "cambio",
@@ -228,26 +242,30 @@ function actividadesPorAlcance(descripcion: string, horasTotales: number): Profo
     const h4 = Math.max(1, base - h1 - h2 - h3);
 
     return [
-      {
+      actividadConRol({
         actividad: "Análisis funcional",
         descripcion: "Revisión del flujo actual y definición del nuevo comportamiento.",
         horas: h1,
-      },
-      {
+        rol: "SEMI_SENIOR",
+      }),
+      actividadConRol({
         actividad: "Desarrollo de flujo",
         descripcion: "Implementación del cambio de flujo solicitado en el módulo.",
         horas: h2,
-      },
-      {
+        rol: "SENIOR",
+      }),
+      actividadConRol({
         actividad: "Reportes",
         descripcion: "Ajuste y validación de reportes asociados al proceso.",
         horas: h3,
-      },
-      {
+        rol: "SEMI_SENIOR",
+      }),
+      actividadConRol({
         actividad: "Pruebas y entrega",
         descripcion: "Pruebas funcionales, correcciones y entrega del cambio.",
         horas: h4,
-      },
+        rol: "JUNIOR",
+      }),
     ];
   }
 
@@ -272,10 +290,11 @@ export function generarActividadesFallback(
     const tpl = PLANTILLAS_ACTIVIDAD[i % PLANTILLAS_ACTIVIDAD.length];
     const horas = base + (resto > 0 ? 1 : 0);
     if (resto > 0) resto -= 1;
-    return {
+    return actividadConRol({
       actividad: tpl.actividad,
       descripcion: i === 1 ? descripcion.slice(0, 240) || tpl.descripcion : tpl.descripcion,
       horas,
-    };
+      rol: ROL_DEFAULT,
+    });
   });
 }
