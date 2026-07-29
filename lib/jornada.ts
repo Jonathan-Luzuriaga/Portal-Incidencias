@@ -15,6 +15,7 @@ import type {
   JornadaEntry,
   JornadaTaskOption,
   JornadaTotals,
+  UpdateJornadaInput,
 } from "./jornada-types";
 
 /** BD "Registro de Jornada Diaria" (override por env, fallback al id conocido). */
@@ -138,6 +139,11 @@ function readDateRange(
   return { start: prop?.date?.start ?? null, end: prop?.date?.end ?? null };
 }
 
+function readRelationIds(props: Record<string, unknown>, name: string): string[] {
+  const prop = props[name] as { relation?: Array<{ id?: string }> } | undefined;
+  return (prop?.relation ?? []).map((r) => r.id).filter((id): id is string => Boolean(id));
+}
+
 function toEntry(page: NotionJornadaPage): JornadaEntry {
   const { start, end } = readDateRange(page.properties, PROP.worked);
   const sumaText = readFormulaString(page.properties, PROP.suma);
@@ -150,6 +156,7 @@ function toEntry(page: NotionJornadaPage): JornadaEntry {
     end,
     sumaText,
     minutes: parseSumaHoras(sumaText),
+    taskIds: readRelationIds(page.properties, PROP.tasks),
   };
 }
 
@@ -263,13 +270,19 @@ async function getTasksDataSourceId(): Promise<string> {
 export async function listMyTasks(
   responsableId?: string,
   onlyCurrentSprint?: boolean
-): Promise<JornadaTaskOption[]> {
+): Promise<{
+  tasks: JornadaTaskOption[];
+  sprintLabel: string | null;
+  filterLabel: string;
+}> {
   const config = getNotionConfig();
   const assigneeProp = getTeamNotionProps().assignee;
   const notion = getNotionClient();
   const dsId = await getTasksDataSourceId();
 
   const conditions: Array<Record<string, unknown>> = [];
+  let sprintLabel: string | null = null;
+
   if (responsableId) {
     conditions.push({ property: assigneeProp, people: { contains: responsableId } });
   }
@@ -277,6 +290,7 @@ export async function listMyTasks(
     const sprintId = await resolveCurrentSprintId();
     if (sprintId) {
       conditions.push({ property: config.props.sprint, relation: { contains: sprintId } });
+      sprintLabel = await resolveSprintTitle(sprintId);
     }
   }
 
@@ -295,9 +309,39 @@ export async function listMyTasks(
   for (const page of response.results) {
     const title = readTitle(page.properties, config.props.title);
     if (!title) continue;
-    out.push({ id: page.id, title, ticketType: readSelect(page.properties, config.props.ticketType) });
+    out.push({
+      id: page.id,
+      title,
+      ticketType: readSelect(page.properties, config.props.ticketType),
+    });
   }
-  return out;
+
+  const parts: string[] = [];
+  if (responsableId) parts.push("filtrado por responsable");
+  if (onlyCurrentSprint) {
+    parts.push(sprintLabel ? `sprint «${sprintLabel}»` : "sprint actual");
+  }
+  if (parts.length === 0) parts.push("tareas recientes (sin filtro)");
+
+  return {
+    tasks: out,
+    sprintLabel,
+    filterLabel: `${out.length} tarea(s) · ${parts.join(" · ")}`,
+  };
+}
+
+async function resolveSprintTitle(sprintId: string): Promise<string | null> {
+  try {
+    const notion = getNotionClient();
+    const page = await notion.request<{
+      properties?: Record<string, { type?: string; title?: Array<{ plain_text?: string }> }>;
+    }>({ path: `pages/${sprintId}`, method: "get" });
+    const titleProp = Object.values(page.properties ?? {}).find((p) => p.type === "title");
+    const name = titleProp?.title?.map((t) => t.plain_text ?? "").join("").trim() ?? "";
+    return name || null;
+  } catch {
+    return null;
+  }
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -305,20 +349,12 @@ const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const MAX_HOURS = 24;
 const MS_PER_MINUTE = 60000;
 
-/**
- * Crea una jornada (una fila) enlazando varias tareas y el rango real
- * inicio → fin. Append-only: no modifica esquema ni filas existentes.
- * "Suma de horas" la calcula Notion desde el rango. Se guarda con offset
- * -05:00 (hora local del equipo). Devuelve la página y el total.
- */
-export async function createJornadaEntry(
-  input: CreateJornadaInput
-): Promise<{ id: string; url: string; totalLabel: string }> {
-  const member = input.member?.trim();
-  const title = input.title?.trim();
-
-  if (!member) throw new ServiceError("Selecciona un miembro del equipo.", 400);
-  if (!title) throw new ServiceError("Escribe un título para la jornada.", 400);
+function buildRangeFromInput(input: {
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+}): { startISO: string; endISO: string; totalMinutes: number } {
   if (!DATE_RE.test(input.startDate) || !DATE_RE.test(input.endDate)) {
     throw new ServiceError("Fecha inválida (usa YYYY-MM-DD).", 400);
   }
@@ -340,6 +376,25 @@ export async function createJornadaEntry(
   if (totalMinutes > MAX_HOURS * MINUTES_PER_HOUR) {
     throw new ServiceError("La jornada no puede superar 24 horas; divídela en dos.", 400);
   }
+  return { startISO, endISO, totalMinutes };
+}
+
+/**
+ * Crea una jornada (una fila) enlazando varias tareas y el rango real
+ * inicio → fin. Append-only: no modifica esquema ni filas existentes.
+ * "Suma de horas" la calcula Notion desde el rango. Se guarda con offset
+ * -05:00 (hora local del equipo). Devuelve la página y el total.
+ */
+export async function createJornadaEntry(
+  input: CreateJornadaInput
+): Promise<{ id: string; url: string; totalLabel: string }> {
+  const member = input.member?.trim();
+  const title = input.title?.trim();
+
+  if (!member) throw new ServiceError("Selecciona un miembro del equipo.", 400);
+  if (!title) throw new ServiceError("Escribe un título para la jornada.", 400);
+
+  const { startISO, endISO, totalMinutes } = buildRangeFromInput(input);
 
   const properties: Record<string, unknown> = {
     [PROP.jornada]: notionTitle(title),
@@ -363,6 +418,75 @@ export async function createJornadaEntry(
     const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
     throw new ServiceError(
       `No se pudo crear la jornada en Notion. Verifica que la integración tenga acceso de edición a «Registro de Jornada Diaria». Detalle: ${message}`,
+      502
+    );
+  }
+}
+
+/**
+ * Actualiza título, rango horario y/o tareas de una jornada existente.
+ * No toca el esquema ni otras filas. Devuelve la entrada actualizada.
+ */
+export async function updateJornadaEntry(
+  input: UpdateJornadaInput
+): Promise<{ id: string; url: string; totalLabel: string; entry: JornadaEntry }> {
+  const pageId = input.pageId?.trim();
+  if (!pageId) throw new ServiceError("Falta el id de la jornada.", 400);
+
+  const properties: Record<string, unknown> = {};
+  let totalMinutes: number | null = null;
+
+  if (typeof input.title === "string") {
+    const title = input.title.trim();
+    if (!title) throw new ServiceError("El título no puede quedar vacío.", 400);
+    properties[PROP.jornada] = notionTitle(title);
+  }
+
+  const hasRange =
+    Boolean(input.startDate) ||
+    Boolean(input.startTime) ||
+    Boolean(input.endDate) ||
+    Boolean(input.endTime);
+  if (hasRange) {
+    if (!input.startDate || !input.startTime || !input.endDate || !input.endTime) {
+      throw new ServiceError("Para cambiar el tiempo envía fecha/hora de inicio y de fin.", 400);
+    }
+    const range = buildRangeFromInput({
+      startDate: input.startDate,
+      startTime: input.startTime,
+      endDate: input.endDate,
+      endTime: input.endTime,
+    });
+    properties[PROP.worked] = { date: { start: range.startISO, end: range.endISO } };
+    totalMinutes = range.totalMinutes;
+  }
+
+  if (Array.isArray(input.taskIds)) {
+    properties[PROP.tasks] = notionRelation(input.taskIds.filter(Boolean));
+  }
+
+  if (Object.keys(properties).length === 0) {
+    throw new ServiceError("No hay cambios para guardar.", 400);
+  }
+
+  const notion = getNotionClient();
+  try {
+    const page = await notion.pages.update({
+      page_id: pageId,
+      properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
+    });
+    const url = "url" in page && typeof page.url === "string" ? page.url : "";
+    const entry = toEntry(page as NotionJornadaPage);
+    return {
+      id: page.id,
+      url,
+      totalLabel: totalMinutes != null ? formatMinutes(totalMinutes) : formatMinutes(entry.minutes),
+      entry,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error desconocido de Notion.";
+    throw new ServiceError(
+      `No se pudo actualizar la jornada en Notion. Detalle: ${message}`,
       502
     );
   }
