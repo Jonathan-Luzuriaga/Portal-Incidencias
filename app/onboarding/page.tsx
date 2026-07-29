@@ -1,4 +1,4 @@
-import { OnboardingGuide } from "@/onboarding/OnboardingGuide";
+import { OnboardingGuide } from "@/components/onboarding/OnboardingGuide";
 
 export default function OnboardingPage() {
   return <OnboardingGuide />;
