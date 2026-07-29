@@ -13,12 +13,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<JornadaTas
   const onlyCurrentSprint = params.get("sprint") === "1";
 
   try {
-    const [tasks, usersRaw] = await Promise.all([
+    const [listed, usersRaw] = await Promise.all([
       listMyTasks(responsable, onlyCurrentSprint),
       listTeamUsers().catch(() => []),
     ]);
     const users: JornadaUserOption[] = usersRaw.map((u) => ({ id: u.id, name: u.name }));
-    return NextResponse.json<JornadaTasksResponse>({ ok: true, tasks, users });
+    return NextResponse.json<JornadaTasksResponse>({
+      ok: true,
+      tasks: listed.tasks,
+      users,
+      sprintLabel: listed.sprintLabel,
+      filterLabel: listed.filterLabel,
+    });
   } catch (err) {
     if (err instanceof ServiceError) {
       return NextResponse.json<JornadaTasksResponse>(

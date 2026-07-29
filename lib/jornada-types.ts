@@ -20,6 +20,8 @@ export interface JornadaEntry {
   sumaText: string;
   /** Minutos parseados desde "Suma de horas". */
   minutes: number;
+  /** IDs de tareas enlazadas (relación «Tareas trabajadas»). */
+  taskIds: string[];
 }
 
 /** Resultado agregado de un periodo de facturación para un miembro. */
@@ -67,6 +69,10 @@ export interface JornadaTasksResponse {
   error?: string;
   tasks?: JornadaTaskOption[];
   users?: JornadaUserOption[];
+  /** Nombre del sprint usado cuando sprint=1 (ej. "Sprint 19"). */
+  sprintLabel?: string | null;
+  /** Resumen legible del filtro aplicado (para la UI). */
+  filterLabel?: string;
 }
 
 /** Payload para crear una jornada (rango fecha/hora inicio → fecha/hora fin). */
@@ -91,4 +97,29 @@ export interface JornadaCreateResponse {
   page?: { id: string; url: string };
   /** Total calculado del rango (para feedback inmediato). */
   totalLabel?: string;
+}
+
+/** Payload para actualizar una jornada existente (título, rango y/o tareas). */
+export interface UpdateJornadaInput {
+  pageId: string;
+  title?: string;
+  /** YYYY-MM-DD */
+  startDate?: string;
+  /** HH:MM (24h) */
+  startTime?: string;
+  /** YYYY-MM-DD */
+  endDate?: string;
+  /** HH:MM (24h) */
+  endTime?: string;
+  /** Si viene, reemplaza la relación completa de tareas. */
+  taskIds?: string[];
+}
+
+export interface JornadaUpdateResponse {
+  ok: boolean;
+  error?: string;
+  page?: { id: string; url: string };
+  totalLabel?: string;
+  /** Entrada actualizada (para refrescar la fila en la UI). */
+  entry?: JornadaEntry;
 }

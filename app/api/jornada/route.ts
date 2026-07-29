@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createJornadaEntry, getJornadaTotals } from "@/lib/jornada";
+import { createJornadaEntry, getJornadaTotals, updateJornadaEntry } from "@/lib/jornada";
 import type {
   CreateJornadaInput,
   JornadaApiResponse,
   JornadaCreateResponse,
+  JornadaUpdateResponse,
+  UpdateJornadaInput,
 } from "@/lib/jornada-types";
 import { ServiceError } from "@/lib/types";
 
@@ -71,5 +73,45 @@ export async function POST(request: NextRequest): Promise<NextResponse<JornadaCr
     const message = err instanceof Error ? err.message : "Error interno del servidor.";
     console.error("[/api/jornada] POST Error:", err);
     return NextResponse.json<JornadaCreateResponse>({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest): Promise<NextResponse<JornadaUpdateResponse>> {
+  let input: UpdateJornadaInput;
+  try {
+    input = (await request.json()) as UpdateJornadaInput;
+  } catch {
+    return NextResponse.json<JornadaUpdateResponse>(
+      { ok: false, error: "Cuerpo JSON inválido." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const { id, url, totalLabel, entry } = await updateJornadaEntry({
+      pageId: input.pageId,
+      title: input.title,
+      startDate: input.startDate,
+      startTime: input.startTime,
+      endDate: input.endDate,
+      endTime: input.endTime,
+      taskIds: Array.isArray(input.taskIds) ? input.taskIds : undefined,
+    });
+    return NextResponse.json<JornadaUpdateResponse>({
+      ok: true,
+      page: { id, url },
+      totalLabel,
+      entry,
+    });
+  } catch (err) {
+    if (err instanceof ServiceError) {
+      return NextResponse.json<JornadaUpdateResponse>(
+        { ok: false, error: err.message },
+        { status: err.status }
+      );
+    }
+    const message = err instanceof Error ? err.message : "Error interno del servidor.";
+    console.error("[/api/jornada] PATCH Error:", err);
+    return NextResponse.json<JornadaUpdateResponse>({ ok: false, error: message }, { status: 500 });
   }
 }
