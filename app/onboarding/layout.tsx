@@ -6,7 +6,7 @@ export const metadata: Metadata = {
     "Guía interactiva para nuevos integrantes de Manticore Labs.",
 };
 
-export default function UmbordingLayout({
+export default function OnboardingLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
