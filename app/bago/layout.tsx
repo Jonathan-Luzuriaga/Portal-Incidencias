@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Reportar incidencia — Bago",
-  description: "Portal de reporte de incidencias para el cliente Bago",
+  title: "Reportar incidencia — Manticore",
+  description: "Portal de reporte de incidencias de Manticore",
 };
 
-export default function BagoLayout({ children }: { children: React.ReactNode }) {
+export default function ManticoreLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

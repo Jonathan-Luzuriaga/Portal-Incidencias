@@ -6,7 +6,7 @@ import { RequiredMark } from "./RequiredMark";
 const ACCEPT =
   ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
+const labelClasses = "mb-2 block text-sm font-semibold text-[#203d58]";
 
 interface DocumentDropInputProps {
   disabled?: boolean;
@@ -101,12 +101,12 @@ export function DocumentDropInput({
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         className={
-          "rounded-md border border-dashed px-4 py-8 text-center outline-none transition " +
+          "rounded-2xl border-2 border-dashed px-4 py-10 text-center outline-none transition duration-200 " +
           (dragOver
-            ? "border-[#2383e2] bg-[#e8f3fc]"
-            : "border-[#d3d1cb] bg-[#f7f7f5]") +
-          " focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 " +
-          (disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-[#b9b9b7]")
+            ? "scale-[1.01] border-[#1a6999] bg-[#e8f3f8]"
+            : "border-[#a8c7d9] bg-[#f6fafc]") +
+          " focus:border-[#1a6999] focus:ring-4 focus:ring-[#1a6999]/10 " +
+          (disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-[#1a6999] hover:bg-[#eef6fa]")
         }
       >
         <p className="text-sm font-medium text-[#37352f]">

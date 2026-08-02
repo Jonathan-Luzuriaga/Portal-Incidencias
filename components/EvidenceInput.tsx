@@ -4,7 +4,7 @@ import { useCallback, useId, useRef, useState } from "react";
 
 const MAX_IMAGES = 10;
 
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
+const labelClasses = "mb-2 block text-sm font-semibold text-[#203d58]";
 
 interface EvidenceInputProps {
   disabled?: boolean;
@@ -81,9 +81,9 @@ export function EvidenceInput({ disabled, onChange }: EvidenceInputProps) {
         tabIndex={disabled ? -1 : 0}
         onPaste={handlePaste}
         className={
-          "rounded-md border border-dashed border-[#d3d1cb] bg-[#f7f7f5] px-3 py-4 text-center outline-none transition " +
-          "focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 " +
-          (disabled ? "cursor-not-allowed opacity-60" : "cursor-text")
+          "rounded-2xl border-2 border-dashed border-[#a8c7d9] bg-[#f6fafc] px-4 py-7 text-center outline-none transition duration-200 " +
+          "focus:border-[#1a6999] focus:ring-4 focus:ring-[#1a6999]/10 " +
+          (disabled ? "cursor-not-allowed opacity-60" : "cursor-text hover:border-[#1a6999] hover:bg-[#eef6fa]")
         }
       >
         <p className="text-sm text-[#37352f]">Haz clic aquí y pega una captura</p>
@@ -101,7 +101,7 @@ export function EvidenceInput({ disabled, onChange }: EvidenceInputProps) {
           addFiles(Array.from(e.target.files ?? []));
           if (fileInputRef.current) fileInputRef.current.value = "";
         }}
-        className="mt-2 block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
+        className="mt-3 block w-full text-sm text-[#506a7d] file:mr-3 file:rounded-xl file:border-0 file:bg-[#e5f0f6] file:px-3 file:py-2 file:text-sm file:font-bold file:text-[#1a6999] hover:file:bg-[#d4e8f3] disabled:opacity-60"
       />
 
       {files.length > 0 && (

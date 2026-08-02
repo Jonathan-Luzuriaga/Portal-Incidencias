@@ -1,7 +1,7 @@
 /** Asterisco rojo para marcar campos obligatorios en los formularios. */
 export function RequiredMark() {
   return (
-    <span className="text-[#eb5757]" aria-hidden="true" title="Campo obligatorio">
+    <span className="text-[#1a6999]" aria-hidden="true" title="Campo obligatorio">
       {" "}
       *
     </span>
@@ -11,8 +11,8 @@ export function RequiredMark() {
 /** Leyenda estándar que explica el asterisco de campos obligatorios. */
 export function RequiredLegend() {
   return (
-    <p className="text-xs text-[#9b9a97]">
-      Los campos marcados con <span className="text-[#eb5757]">*</span> son
+    <p className="mt-1 text-xs text-[#627b8e]">
+      Los campos marcados con <span className="font-bold text-[#1a6999]">*</span> son
       obligatorios.
     </p>
   );

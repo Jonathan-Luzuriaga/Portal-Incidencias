@@ -7,12 +7,12 @@ import {
 import { RequiredMark } from "./RequiredMark";
 
 const fieldClasses =
-  "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
-  "shadow-[0_1px_2px_rgba(15,15,15,0.04)] outline-none transition " +
-  "focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
+  "w-full rounded-xl border border-[#d5e3ec] bg-white px-3.5 py-3 text-sm text-[#173b59] " +
+  "shadow-[0_1px_2px_rgba(65,28,51,0.03)] outline-none transition duration-200 " +
+  "hover:border-[#9bbdd2] focus:border-[#1a6999] focus:ring-4 focus:ring-[#1a6999]/10 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
+const labelClasses = "mb-2 block text-sm font-semibold text-[#203d58]";
 
 interface ClientProjectSelectProps {
   id?: string;

@@ -9,10 +9,10 @@ interface SuccessPanelProps {
 
 export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro reporte" }: SuccessPanelProps) {
   return (
-    <div className="rounded-lg border border-[#efefef] bg-white p-6">
+    <div className="rounded-3xl border border-[#d7e5ee] bg-white p-6 shadow-[0_24px_70px_rgba(20,45,86,0.1)] sm:p-8">
       <div className="text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#edf7ee]">
-          <svg className="h-5 w-5 text-[#448361]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e5f0f6]">
+          <svg className="h-7 w-7 text-[#1a6999]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path
               fillRule="evenodd"
               d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.42 0l-3.5-3.5a1 1 0 111.42-1.42l2.79 2.79 6.79-6.79a1 1 0 011.42 0z"
@@ -20,7 +20,7 @@ export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro 
             />
           </svg>
         </div>
-        <h2 className="text-base font-semibold text-[#37352f]">{title}</h2>
+        <h2 className="text-xl font-black text-[#142d56]">{title}</h2>
         <p className="mt-1 text-sm text-[#787774]">
           El ticket padre y sus subtareas se crearon en Notion con sprint y fechas del día.
         </p>
@@ -73,7 +73,7 @@ export function SuccessPanel({ title, items, onReset, resetLabel = "Enviar otro 
         <button
           type="button"
           onClick={onReset}
-          className="inline-flex items-center justify-center rounded-md border border-[#efefef] bg-white px-4 py-2 text-sm font-medium text-[#37352f] transition hover:bg-[#f7f7f5]"
+          className="inline-flex items-center justify-center rounded-xl border border-[#9bbdd2] bg-white px-4 py-2.5 text-sm font-bold text-[#1a6999] transition hover:border-[#1a6999] hover:bg-[#eef6fa]"
         >
           {resetLabel}
         </button>

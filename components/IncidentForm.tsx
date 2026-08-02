@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { CreatedIncidentSummary, IncidentApiResponse } from "@/lib/types";
-import { DEFAULT_CLIENT_PROJECT, resolveClientProject } from "@/lib/project-profiles";
+import { resolveClientProject } from "@/lib/project-profiles";
 import { ClientProjectSelect } from "./ClientProjectSelect";
 import { EvidenceInput } from "./EvidenceInput";
 import { RequiredLegend, RequiredMark } from "./RequiredMark";
@@ -25,18 +25,35 @@ const ENVIRONMENT_OPTIONS = [
 ] as const;
 
 const fieldClasses =
-  "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
-  "shadow-[0_1px_2px_rgba(15,15,15,0.04)] outline-none transition " +
-  "placeholder:text-[#9b9a97] focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
+  "w-full rounded-xl border border-[#d5e3ec] bg-white px-3.5 py-3 text-sm text-[#173b59] " +
+  "shadow-[0_1px_2px_rgba(65,28,51,0.03)] outline-none transition duration-200 " +
+  "placeholder:text-[#8399aa] hover:border-[#9bbdd2] focus:border-[#1a6999] focus:ring-4 focus:ring-[#1a6999]/10 " +
   "disabled:cursor-not-allowed disabled:opacity-60";
 
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
+const labelClasses = "mb-2 block text-sm font-semibold text-[#203d58]";
 
-const sectionClasses = "space-y-4 border-t border-[#efefef] pt-4 first:border-t-0 first:pt-0";
+const sectionClasses =
+  "space-y-5 rounded-2xl border border-[#deebf2] bg-[#fffefe] p-4 shadow-[0_10px_28px_rgba(20,45,86,0.035)] sm:p-6";
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({
+  number,
+  children,
+  description,
+}: {
+  number: string;
+  children: React.ReactNode;
+  description: string;
+}) {
   return (
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-[#9b9a97]">{children}</h3>
+    <div className="flex items-start gap-3 border-b border-[#f1e7ed] pb-4">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#e5f0f6] text-xs font-black text-[#1a6999]">
+        {number}
+      </span>
+      <div>
+        <h3 className="text-sm font-bold text-[#142d56]">{children}</h3>
+        <p className="mt-0.5 text-xs leading-5 text-[#627b8e]">{description}</p>
+      </div>
+    </div>
   );
 }
 
@@ -67,15 +84,25 @@ export default function IncidentForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [created, setCreated] = useState<CreatedIncidentSummary[]>([]);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
-  const [dateTime, setDateTime] = useState("");
-  const [clientProject, setClientProject] = useState(DEFAULT_CLIENT_PROJECT);
+  const [dateTime, setDateTime] = useState(() => nowInGuayaquil());
+  const [clientProject, setClientProject] = useState(() => resolveClientProject(searchParams.get("proyecto")));
+  const [completion, setCompletion] = useState(25);
 
-  useEffect(() => {
-    setDateTime(nowInGuayaquil());
-    setClientProject(resolveClientProject(searchParams.get("proyecto")));
-  }, [searchParams]);
 
   const loading = status === "loading";
+
+  function updateCompletion() {
+    requestAnimationFrame(() => {
+      const form = formRef.current;
+      if (!form) return;
+      const required = Array.from(
+        form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[required]")
+      );
+      const names = new Set(required.map((field) => field.name));
+      const completed = [...names].filter((name) => required.some((field) => field.name === name && field.value.trim())).length;
+      setCompletion(names.size ? Math.round((completed / names.size) * 100) : 0);
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -120,6 +147,7 @@ export default function IncidentForm() {
     setStatus("idle");
     setErrorMsg("");
     setCreated([]);
+    setCompletion(25);
   }
 
   if (status === "success") {
@@ -136,16 +164,32 @@ export default function IncidentForm() {
     <form
       ref={formRef}
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
+      onInput={updateCompletion}
+      onChange={updateCompletion}
+      className="space-y-5 rounded-3xl border border-[#d7e5ee] bg-white p-4 shadow-[0_24px_70px_rgba(20,45,86,0.1)] sm:p-6"
       noValidate
     >
       <input type="hidden" name="dateTime" value={dateTime} />
 
-      <RequiredLegend />
+      <div className="rounded-2xl bg-[#f4f8fb] p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-[#142d56]">Completa tu reporte</p>
+            <RequiredLegend />
+          </div>
+          <span className="text-sm font-black tabular-nums text-[#1a6999]">{completion}%</span>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eadce5]">
+          <div
+            className="h-full rounded-full bg-[#1a6999] transition-[width] duration-300 ease-out"
+            style={{ width: completion + "%" }}
+          />
+        </div>
+      </div>
 
       {/* --- Datos generales --- */}
       <div className={sectionClasses}>
-        <SectionTitle>Datos generales</SectionTitle>
+        <SectionTitle number="01" description={"Cu\u00e9ntanos qu\u00e9 ocurri\u00f3 y d\u00f3nde lo observaste."}>Datos generales</SectionTitle>
 
         <ClientProjectSelect
           value={clientProject}
@@ -167,14 +211,27 @@ export default function IncidentForm() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="priority" className={labelClasses}>Prioridad<RequiredMark /></label>
-            <select id="priority" name="priority" required disabled={loading} className={fieldClasses} defaultValue="Medio">
+          <fieldset>
+            <legend className={labelClasses}>Prioridad<RequiredMark /></legend>
+            <div className="grid grid-cols-3 gap-2">
               {PRIORITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <label key={opt.value} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="priority"
+                    value={opt.value}
+                    required
+                    disabled={loading}
+                    defaultChecked={opt.value === "Medio"}
+                    className="peer sr-only"
+                  />
+                  <span className="flex min-h-11 items-center justify-center rounded-xl border border-[#d5e3ec] bg-white px-2 text-xs font-bold text-[#506a7d] transition hover:border-[#9bbbd0] peer-checked:border-[#1a6999] peer-checked:bg-[#e6f1f7] peer-checked:text-[#1a6999] peer-focus-visible:ring-4 peer-focus-visible:ring-[#1a6999]/10">
+                    {opt.label}
+                  </span>
+                </label>
               ))}
-            </select>
-          </div>
+            </div>
+          </fieldset>
           <div>
             <label htmlFor="environment" className={labelClasses}>Ambiente<RequiredMark /></label>
             <select id="environment" name="environment" required disabled={loading} className={fieldClasses} defaultValue="LATEST">
@@ -214,7 +271,7 @@ export default function IncidentForm() {
 
       {/* --- Contexto y entorno --- */}
       <div className={sectionClasses}>
-        <SectionTitle>Contexto y entorno</SectionTitle>
+        <SectionTitle number="02" description={"Ay\u00fadanos a reproducir el problema en las mismas condiciones."}>Contexto y entorno</SectionTitle>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -283,7 +340,7 @@ export default function IncidentForm() {
 
       {/* --- Detalle del bug --- */}
       <div className={sectionClasses}>
-        <SectionTitle>Detalle del bug</SectionTitle>
+        <SectionTitle number="03" description="Compara el comportamiento actual con el resultado esperado.">Detalle del bug</SectionTitle>
 
         <div>
           <label htmlFor="actualResult" className={labelClasses}>Resultado actual (pasos)<RequiredMark /></label>
@@ -314,13 +371,13 @@ export default function IncidentForm() {
 
       {/* --- Evidencias --- */}
       <div className={sectionClasses}>
-        <SectionTitle>Evidencias</SectionTitle>
+        <SectionTitle number="04" description={"Las capturas aceleran la revisi\u00f3n y reducen preguntas."}>Evidencias</SectionTitle>
 
         <EvidenceInput disabled={loading} onChange={setEvidenceFiles} />
       </div>
 
       {status === "error" && (
-        <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
+        <div className="rounded-xl border border-[#f0c8d3] bg-[#fff4f6] px-4 py-3 text-sm text-[#a33350]">
           {errorMsg}
         </div>
       )}
@@ -328,7 +385,7 @@ export default function IncidentForm() {
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+        className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1a6999] px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_26px_rgba(26,105,153,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#13416e] hover:shadow-[0_16px_32px_rgba(26,105,153,0.3)] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
       >
         {loading && <Spinner />}
         {loading ? "Procesando reporte…" : "Enviar incidencia"}

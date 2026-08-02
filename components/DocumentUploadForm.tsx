@@ -1,22 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { CreatedIncidentSummary, IncidentApiResponse } from "@/lib/types";
-import { DEFAULT_CLIENT_PROJECT, resolveClientProject } from "@/lib/project-profiles";
+import { resolveClientProject } from "@/lib/project-profiles";
 import { ClientProjectSelect } from "./ClientProjectSelect";
-import { RequiredLegend, RequiredMark } from "./RequiredMark";
+import { DocumentDropInput } from "./DocumentDropInput";
+import { RequiredLegend } from "./RequiredMark";
 import { SuccessPanel } from "./SuccessPanel";
 
 type Status = "idle" | "loading" | "success" | "error";
-
-const fieldClasses =
-  "w-full rounded-md border border-[#efefef] bg-white px-3 py-2 text-sm text-[#37352f] " +
-  "shadow-[0_1px_2px_rgba(15,15,15,0.04)] outline-none transition " +
-  "placeholder:text-[#9b9a97] focus:border-[#b9b9b7] focus:ring-2 focus:ring-[#2383e2]/20 " +
-  "disabled:cursor-not-allowed disabled:opacity-60";
-
-const labelClasses = "mb-1.5 block text-sm font-medium text-[#37352f]";
 
 function Spinner() {
   return (
@@ -34,11 +27,8 @@ export default function DocumentUploadForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [created, setCreated] = useState<CreatedIncidentSummary[]>([]);
   const [docName, setDocName] = useState("");
-  const [clientProject, setClientProject] = useState(DEFAULT_CLIENT_PROJECT);
+  const [clientProject, setClientProject] = useState(() => resolveClientProject(searchParams.get("proyecto")));
 
-  useEffect(() => {
-    setClientProject(resolveClientProject(searchParams.get("proyecto")));
-  }, [searchParams]);
 
   const loading = status === "loading";
 
@@ -104,9 +94,23 @@ export default function DocumentUploadForm() {
     <form
       ref={formRef}
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-lg border border-[#efefef] bg-white p-5"
+      className="space-y-5 rounded-3xl border border-[#d7e5ee] bg-white p-4 shadow-[0_24px_70px_rgba(20,45,86,0.1)] sm:p-6"
     >
-      <RequiredLegend />
+      <div className="rounded-2xl bg-[#f4f8fb] p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#dcecf5] text-[#1a6999]">
+            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+              <path d="M7 3.75h7l4 4v12.5H7z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              <path d="M14 3.75v4h4" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <p className="text-sm font-bold text-[#142d56]">Convierte tu documento en incidencias</p>
+            <p className="mt-1 text-xs leading-5 text-[#627b8e]">Acepta PDF o DOCX de hasta 15 MB. El sistema identifica y organiza cada incidencia.</p>
+            <RequiredLegend />
+          </div>
+        </div>
+      </div>
 
       <ClientProjectSelect
         id="clientProjectDoc"
@@ -117,16 +121,13 @@ export default function DocumentUploadForm() {
       />
 
       <div>
-        <label htmlFor="document" className={labelClasses}>Reporte (PDF o DOCX)<RequiredMark /></label>
-        <input
+        <DocumentDropInput
           id="document"
           name="document"
-          type="file"
-          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          required
+          label="Reporte (PDF o DOCX)"
+          hint="Arrastra el archivo aqui o haz clic para seleccionarlo."
           disabled={loading}
-          onChange={(e) => setDocName(e.target.files?.[0]?.name ?? "")}
-          className="block w-full text-sm text-[#787774] file:mr-3 file:rounded-md file:border file:border-[#efefef] file:bg-[#f7f7f5] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[#37352f] hover:file:bg-[#efefef] disabled:opacity-60"
+          onFileChange={(file) => setDocName(file?.name ?? "")}
         />
         {docName && <p className="mt-1 text-xs text-[#787774]">• {docName}</p>}
         <p className="mt-2 text-xs text-[#9b9a97]">
@@ -134,8 +135,17 @@ export default function DocumentUploadForm() {
         </p>
       </div>
 
+      <div className="grid gap-2 sm:grid-cols-3">
+        {["Lee el contenido", "Separa incidencias", "Crea los tickets"].map((label, index) => (
+          <div key={label} className="rounded-xl border border-[#deebf2] bg-[#f8fbfd] px-3 py-3">
+            <span className="text-[10px] font-black text-[#1a6999]">0{index + 1}</span>
+            <p className="mt-1 text-xs font-semibold text-[#315b7b]">{label}</p>
+          </div>
+        ))}
+      </div>
+
       {status === "error" && (
-        <div className="rounded-md border border-[#ffe2dd] bg-[#fdf0ef] px-3 py-2 text-sm text-[#b5403a]">
+        <div className="rounded-xl border border-[#f0c8d3] bg-[#fff4f6] px-4 py-3 text-sm text-[#a33350]">
           {errorMsg}
         </div>
       )}
@@ -143,7 +153,7 @@ export default function DocumentUploadForm() {
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#2383e2] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a73d1] disabled:cursor-not-allowed disabled:opacity-70"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1a6999] px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_26px_rgba(26,105,153,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#13416e] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
       >
         {loading && <Spinner />}
         {loading ? "Leyendo documento y creando tareas…" : "Procesar documento"}
